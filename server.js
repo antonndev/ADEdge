@@ -38,7 +38,8 @@ const {
 
 const APP_ROOT = path.resolve(__dirname);
 const ENV_PATH = path.join(APP_ROOT, '.env');
-const DASHBOARD_HTML = path.join(APP_ROOT, 'public', 'dashboard.html');
+const PUBLIC_DIR = path.join(APP_ROOT, 'public');
+const DASHBOARD_HTML_PATH = path.join(PUBLIC_DIR, 'dashboard.html');
 
 const DEFAULTS = {
   PORT: 3000,
@@ -315,7 +316,7 @@ async function init() {
     const app = express();
     app.use(express.json({ limit: '1mb' }));
     app.use(cookieParser());
-    app.use('/public', express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
+    app.use('/public', express.static(PUBLIC_DIR, { maxAge: '1d' }));
     app.use('/backgrounds', express.static(BACKGROUND_DIR, { maxAge: '7d' }));
 
     // rate limiter in-memory
@@ -422,46 +423,6 @@ async function init() {
       return normalizeBackgroundPref(user && user.preferences && user.preferences.background || DEFAULT_BACKGROUND);
     }
 
-    function escapeCssUrl(url) {
-      return String(url).replace(/(["\\])/g, '\\$1');
-    }
-
-    function formatDashboardBackground(pref) {
-      if (!pref || !pref.value) return DEFAULT_BACKGROUND.value;
-      if (pref.type === 'color') {
-        return pref.value;
-      }
-      const escaped = escapeCssUrl(pref.value);
-      return `#040814 url("${escaped}") center/cover no-repeat fixed`;
-    }
-
-    function rewriteDashboardBackground(pref) {
-      if (!pref || !pref.value) return false;
-      const cssValue = formatDashboardBackground(pref);
-      try {
-        const original = fs.readFileSync(DASHBOARD_HTML, 'utf8');
-        let matched = false;
-        let updated = false;
-        const replaced = original.replace(/(body\s*\{[^}]*?background:\s*)([^;]+)(;)/, (full, prefix, current, suffix) => {
-          matched = true;
-          const trimmed = (current || '').trim();
-          if (trimmed !== cssValue) {
-            updated = true;
-          }
-          return `${prefix}${cssValue}${suffix}`;
-        });
-        if (!matched) return false;
-        if (!updated) return true;
-        const tempPath = `${DASHBOARD_HTML}.${process.pid}.${Date.now()}.tmp`;
-        fs.writeFileSync(tempPath, replaced, 'utf8');
-        fs.renameSync(tempPath, DASHBOARD_HTML);
-        return true;
-      } catch (err) {
-        console.error('Failed to rewrite dashboard background', err);
-        return false;
-      }
-    }
-
     function setBackgroundPreference(username, pref) {
       const sanitized = normalizeBackgroundPref(pref);
       const user = findUser(username);
@@ -470,6 +431,38 @@ async function init() {
       prefs.background = sanitized;
       const ok = updateUser(username, { preferences: prefs });
       return ok ? sanitized : false;
+    }
+
+    function escapeCssUrl(value) {
+      return String(value || '').replace(/'/g, "\\'");
+    }
+
+    async function rewriteDashboardBackground(pref) {
+      if (!pref) return;
+      try {
+        const html = await fsp.readFile(DASHBOARD_HTML_PATH, 'utf8');
+        let next = html;
+        const varPattern = /(--bg:\s*)([^;]+)(;)/;
+        const bodyPattern = /(body\s*\{[^}]*?background:\s*)([^;]+)(;)/;
+        const colorValue = pref.type === 'color' ? pref.value : DEFAULT_BACKGROUND.value;
+        const backgroundValue = pref.type === 'color'
+          ? pref.value
+          : `url('${escapeCssUrl(pref.value)}') center/cover no-repeat fixed`;
+
+        if (varPattern.test(next)) {
+          next = next.replace(varPattern, `$1${colorValue}$3`);
+        }
+
+        if (bodyPattern.test(next)) {
+          next = next.replace(bodyPattern, `$1${backgroundValue}$3`);
+        }
+
+        if (next !== html) {
+          await fsp.writeFile(DASHBOARD_HTML_PATH, next, 'utf8');
+        }
+      } catch (err) {
+        console.error('Failed to rewrite dashboard background', err);
+      }
     }
 
     function userForClient(user) {
@@ -487,8 +480,8 @@ async function init() {
     app.get('/', (req, res) => {
       try {
         const username = checkAuthFromReq(req);
-        if (username) return res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-        return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+        if (username) return res.sendFile(path.join(PUBLIC_DIR, 'dashboard.html'));
+        return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
       } catch (err) {
         console.error('Error serving /', err);
         return jsonError(res, 500, 'Internal server error');
@@ -498,8 +491,8 @@ async function init() {
     app.get('/settings', (req, res) => {
       try {
         const username = checkAuthFromReq(req);
-        if (!username) return res.sendFile(path.join(__dirname, 'public', 'login.html'));
-        return res.sendFile(path.join(__dirname, 'public', 'settings.html'));
+        if (!username) return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
+        return res.sendFile(path.join(PUBLIC_DIR, 'settings.html'));
       } catch (err) {
         console.error('Error serving /settings', err);
         return jsonError(res, 500, 'Internal server error');
@@ -721,21 +714,21 @@ async function init() {
       return res.json({ success: true, templates: TEMPLATE_BACKGROUNDS, defaultBackground: DEFAULT_BACKGROUND });
     });
 
-    app.post('/api/account/background', (req, res) => {
+    app.post('/api/account/background', async (req, res) => {
       const username = checkAuthFromReq(req);
       if (!username) return jsonError(res, 401, 'Unauthorized');
       const preference = req.body && req.body.preference;
       if (!preference) return jsonError(res, 400, 'preference required');
       const saved = setBackgroundPreference(username, preference);
       if (!saved) return jsonError(res, 500, 'Failed to save preference');
-      rewriteDashboardBackground(saved);
+      await rewriteDashboardBackground(saved);
       return res.json({ success: true, backgroundPreference: saved });
     });
 
     app.post('/api/account/background/upload', (req, res) => {
       const username = checkAuthFromReq(req);
       if (!username) return jsonError(res, 401, 'Unauthorized');
-      backgroundUpload.single('background')(req, res, err => {
+      backgroundUpload.single('background')(req, res, async err => {
         if (err) {
           console.error('Background upload error', err);
           return jsonError(res, 400, err.message || 'Upload failed');
@@ -744,7 +737,7 @@ async function init() {
         const fileUrl = `/backgrounds/${req.file.filename}`;
         const saved = setBackgroundPreference(username, { type: 'image', value: fileUrl });
         if (!saved) return jsonError(res, 500, 'Failed to save preference');
-        rewriteDashboardBackground(saved);
+        await rewriteDashboardBackground(saved);
         return res.json({ success: true, backgroundPreference: saved });
       });
     });
@@ -905,8 +898,8 @@ async function init() {
         return jsonError(res, 404, 'Not found');
       }
       const username = checkAuthFromReq(req);
-      if (username) return res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-      return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+      if (username) return res.sendFile(path.join(PUBLIC_DIR, 'dashboard.html'));
+      return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
     });
 
     // Global error handler

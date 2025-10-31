@@ -64,6 +64,7 @@
       display: flex;
       min-height: 100vh;
       isolation: isolate;
+      --drawer-offset: 0px;
     }
 
     .settings-main {
@@ -148,15 +149,29 @@
       place-items: center;
       cursor: pointer;
       z-index: 60;
-      transition: transform 0.3s ease, border-color 0.3s ease, background 0.3s ease;
+      transition: transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), border-color 0.3s ease, background 0.3s ease;
+      transform: translate3d(0, 0, 0);
     }
 
-    .menu-toggle svg { width: 22px; height: 22px; }
+    .menu-toggle svg {
+      width: 22px;
+      height: 22px;
+      transition: transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
 
     .menu-toggle:hover {
       border-color: rgba(255, 255, 255, 0.35);
       background: rgba(15, 20, 34, 0.9);
-      transform: translateY(-2px);
+      transform: translate3d(var(--drawer-offset, 0px), -2px, 0);
+    }
+
+    .settings-stage.nav-open .menu-toggle {
+      transform: translate3d(var(--drawer-offset, 0px), 0, 0);
+    }
+
+    .settings-stage.nav-open .menu-toggle svg,
+    .menu-toggle.is-active svg {
+      transform: rotate(90deg);
     }
 
     .drawer-backdrop {
@@ -210,7 +225,7 @@
     .drawer-top {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-start;
       gap: 12px;
     }
 
@@ -585,28 +600,20 @@
     .close-btn:hover { border-color: rgba(255, 255, 255, 0.32); }
 
     @media (min-width: 1024px) {
-      .settings-stage {
-        padding-left: 320px;
-        transition: padding 0.4s ease;
-      }
+      .settings-stage { padding-left: 0; }
 
-      .settings-stage.drawer-hidden { padding-left: 0; }
+      .settings-stage.nav-open { padding-left: 320px; }
 
       .settings-drawer {
-        position: fixed;
-        transform: translateX(0);
-        width: 280px;
         inset: 32px auto 32px 32px;
+        width: 280px;
         border-radius: 28px;
         height: calc(100vh - 64px);
         overflow: hidden;
       }
 
-      .settings-stage.drawer-hidden .settings-drawer { transform: translateX(-110%); }
-
       .drawer-backdrop { display: none; }
-      .menu-toggle { left: 44px; }
-      .settings-stage.drawer-hidden .menu-toggle { left: 26px; }
+      .menu-toggle { left: 32px; top: 36px; }
     }
 
     @media (max-width: 720px) {
@@ -617,7 +624,7 @@
 </head>
 <body>
   <div class="settings-stage">
-    <button id="settingsMenuToggle" class="menu-toggle" type="button" aria-label="Open settings menu">
+    <button id="settingsMenuToggle" class="menu-toggle" type="button" aria-label="Toggle settings menu" aria-expanded="false" aria-controls="settingsNav">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 6h16M4 12h10M4 18h16" />
       </svg>

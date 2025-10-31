@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const settingsMenuToggle = document.getElementById('settingsMenuToggle');
   const settingsNav = document.getElementById('settingsNav');
   const settingsNavBackdrop = document.getElementById('settingsNavBackdrop');
+  const settingsStage = document.querySelector('.settings-stage');
   const settingsPanels = document.querySelectorAll('[data-settings-panel]');
   const navButtons = settingsNav ? Array.from(settingsNav.querySelectorAll('[data-panel-target]')) : [];
   const backgroundFileName = document.getElementById('backgroundFileName');
@@ -46,50 +47,82 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  let updateDrawerOffsetFn = null;
+
   if (settingsNav && navButtons.length) {
     const media = window.matchMedia('(min-width: 1024px)');
-    const settingsStage = document.querySelector('.settings-stage');
-    let navOpen = media.matches;
 
-    const applyStageState = open => {
-      if (!settingsStage) return;
-      settingsStage.classList.toggle('drawer-hidden', !open);
+    const toggleButtonState = open => {
+      if (!settingsMenuToggle) return;
+      settingsMenuToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      settingsMenuToggle.classList.toggle('is-active', open);
     };
 
-    const updateBackdrop = open => {
-      if (!settingsNavBackdrop) return;
-      if (open && !media.matches) {
-        settingsNavBackdrop.classList.add('visible');
-        settingsNavBackdrop.removeAttribute('hidden');
+    const updateDrawerOffset = () => {
+      if (!settingsStage) return;
+      if (!settingsStage.classList.contains('nav-open')) {
+        settingsStage.style.setProperty('--drawer-offset', '0px');
+        return;
+      }
+      requestAnimationFrame(() => {
+        const rect = settingsNav.getBoundingClientRect();
+        const width = rect.width || 0;
+        const margin = media.matches ? 26 : -6;
+        const offset = Math.max(0, Math.round(width + margin));
+        settingsStage.style.setProperty('--drawer-offset', `${offset}px`);
+      });
+    };
+    updateDrawerOffsetFn = updateDrawerOffset;
+
+    const openNav = ({ skipBackdrop = false, silent = false } = {}) => {
+      settingsNav.classList.add('is-open');
+      settingsStage?.classList.add('nav-open');
+      toggleButtonState(true);
+      if (skipBackdrop) {
+        settingsNavBackdrop?.classList.remove('visible');
+        settingsNavBackdrop?.setAttribute('hidden', 'hidden');
       } else {
-        settingsNavBackdrop.classList.remove('visible');
-        settingsNavBackdrop.setAttribute('hidden', 'hidden');
+        settingsNavBackdrop?.classList.add('visible');
+        settingsNavBackdrop?.removeAttribute('hidden');
+      }
+      updateDrawerOffset();
+      if (!silent) settingsMenuToggle?.focus?.();
+    };
+
+    const closeNav = ({ silent = false } = {}) => {
+      settingsNav.classList.remove('is-open');
+      settingsStage?.classList.remove('nav-open');
+      toggleButtonState(false);
+      settingsNavBackdrop?.classList.remove('visible');
+      settingsNavBackdrop?.setAttribute('hidden', 'hidden');
+      updateDrawerOffset();
+      if (!silent) settingsMenuToggle?.focus?.();
+    };
+
+    const syncViewport = () => {
+      if (media.matches) {
+        openNav({ skipBackdrop: true, silent: true });
+      } else {
+        closeNav({ silent: true });
       }
     };
 
-    const setNavState = open => {
-      navOpen = open;
-      settingsNav.classList.toggle('is-open', open);
-      applyStageState(open);
-      updateBackdrop(open);
-      settingsMenuToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
-    };
-
-    const closeNav = () => setNavState(false);
-
-    setNavState(navOpen);
-    media.addEventListener('change', () => setNavState(navOpen));
+    syncViewport();
+    media.addEventListener('change', syncViewport);
 
     settingsMenuToggle?.addEventListener('click', () => {
-      setNavState(!navOpen);
+      const isOpen = settingsStage?.classList.contains('nav-open');
+      if (isOpen) {
+        closeNav();
+      } else {
+        openNav({ skipBackdrop: media.matches });
+      }
     });
-    settingsNavBackdrop?.addEventListener('click', () => {
-      if (navOpen) closeNav();
-    });
+    settingsNavBackdrop?.addEventListener('click', () => closeNav());
 
     document.addEventListener('keydown', evt => {
       if (evt.key === 'Escape') {
-        if (navOpen) closeNav();
+        if (settingsStage?.classList.contains('nav-open') && !media.matches) closeNav();
         if (createAccountModal?.classList.contains('open')) closeModal(createAccountModal);
       }
     });
@@ -99,9 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = btn.dataset.panelTarget;
         if (!target) return;
         switchSettingsPanel(target);
-        if (!media.matches) {
-          closeNav();
-        }
+        if (!media.matches) closeNav();
       });
     });
 
@@ -121,6 +152,8 @@ document.addEventListener('DOMContentLoaded', () => {
       settingsNav.style.setProperty('--cursor-opacity', '0');
       settingsNav.classList.remove('glow-active');
     });
+
+    window.addEventListener('resize', updateDrawerOffset);
   }
 
   const preferencesCard = document.getElementById('preferencesCard');
@@ -453,30 +486,25 @@ document.addEventListener('DOMContentLoaded', () => {
     markTemplate(pref.type === 'template' ? pref.value : null);
   }
 
-  function escapeCssUrl(url) {
-    return String(url || '').replace(/(["\\])/g, '\\$1');
-  }
-
-  function formatBackground(pref) {
-    if (!pref || !pref.value) return defaultBackground.value;
-    if (pref.type === 'color') return pref.value;
-    const escaped = escapeCssUrl(pref.value);
-    return `#040814 url("${escaped}") center/cover no-repeat fixed`;
-  }
-
   function applyBackground(pref) {
     const root = document.body;
     if (!root || !pref) return;
     root.dataset.bgType = pref.type || 'color';
-    const backgroundValue = formatBackground(pref);
-    root.style.background = backgroundValue;
     if (pref.type === 'color') {
+      root.style.backgroundImage = 'none';
+      root.style.backgroundColor = pref.value;
       root.style.setProperty('--settings-bg', pref.value);
       root.style.removeProperty('background-size');
       root.style.removeProperty('background-repeat');
       root.style.removeProperty('background-position');
       root.style.removeProperty('background-attachment');
     } else {
+      root.style.backgroundImage = `url('${pref.value}')`;
+      root.style.backgroundColor = '#040814';
+      root.style.backgroundSize = 'cover';
+      root.style.backgroundRepeat = 'no-repeat';
+      root.style.backgroundPosition = 'center';
+      root.style.backgroundAttachment = 'fixed';
       root.style.removeProperty('--settings-bg');
     }
   }
@@ -717,6 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
       }
+      updateDrawerOffsetFn?.();
     } catch (err) {
       console.error(err);
     }
