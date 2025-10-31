@@ -1,203 +1,1039 @@
 <!doctype html>
-<html lang="ro">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Edge · Dashboard</title>
+  <title>ADEdge · Dashboard</title>
 
-  <!-- Inter font -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
-    :root{
-      --bg:#0b1220;
-      --panel:#0f1a2b;
-      --muted:#98a0b3;
-      --accent:#2dd4bf;
-      --text:#e6eef8;
-      --border:rgba(255,255,255,0.04);
-      --glass:rgba(255,255,255,0.02);
-      --radius:12px;
-      --shadow-sm: 0 6px 20px rgba(2,6,23,0.55);
-      --shadow-lg: 0 18px 50px rgba(2,6,23,0.7);
+    :root {
+      --bg:#05080f;
+      --surface:#0d1424;
+      --surface-soft:rgba(18,27,44,0.82);
+      --outline:rgba(255,255,255,0.08);
+      --outline-strong:rgba(255,255,255,0.16);
+      --text:#f2f6ff;
+      --text-soft:rgba(226,232,255,0.72);
+      --muted:rgba(172,186,219,0.78);
+      --accent:#4ad4ff;
+      --accent-strong:#55f0ff;
+      --accent-soft:rgba(74,212,255,0.18);
+      --warn:#ff3d61;
+      --glass:#121a2d;
+      --radius-lg:26px;
+      --radius-md:18px;
+      --shadow-lg:0 38px 80px rgba(5,9,20,0.55);
+      --shadow-md:0 20px 46px rgba(5,9,20,0.4);
+      --shadow-sm:0 12px 28px rgba(4,8,18,0.35);
     }
-    *{box-sizing:border-box}
-    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
-    .container{max-width:1100px;margin:0 auto;padding:20px}
 
-    /* Topbar */
-    .topbar{position:sticky;top:0;padding:12px 0;background:rgba(11,18,32,0.6);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);z-index:40}
-    .topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:12px}
-    .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
-    .brand-logo{width:44px;height:44px;border-radius:10px;object-fit:cover;border:1px solid var(--border);background:var(--panel);padding:6px}
-    .brand-text strong{display:block;font-size:16px}
-    .brand-text small{display:block;color:var(--muted);font-size:12px}
-    .top-actions{display:flex;align-items:center;gap:10px}
-    .link{color:var(--muted);text-decoration:none;font-size:14px}
+    *, *::before, *::after { box-sizing: border-box; }
 
-    /* Buttons */
-    .btn{font-weight:600;border-radius:10px;padding:8px 12px;border:0;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
-    .btn.primary{background:var(--accent);color:#012;box-shadow:0 8px 28px rgba(45,212,191,0.08)}
-    .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
-    .btn.flat{background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--muted)}
+    html { scroll-behavior: smooth; }
 
-    /* Layout */
-    .main-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;margin-top:18px}
-    .card{background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border-radius:var(--radius);padding:18px;border:1px solid var(--border);box-shadow:var(--shadow-sm)}
-    .upload-card{grid-column:span 5;display:flex;flex-direction:column;gap:12px;min-height:300px}
-    .gallery-card{grid-column:span 7;display:flex;flex-direction:column;gap:12px;min-height:300px}
-    .card-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
-    .muted{color:var(--muted);font-size:13px}
-    .small-muted{font-size:12px;color:var(--muted)}
+    body {
+      min-height: 100vh;
+      margin: 0;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+      position: relative;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(96,152,255,0.6) rgba(9,13,24,0.9);
+    }
 
-    /* Dropzone & chooser */
-    .dropzone-wrap{display:flex;flex-direction:column;gap:10px}
-    .dropzone{display:flex;align-items:center;gap:12px;border-radius:10px;padding:14px;border:1px dashed var(--border);background:var(--glass);cursor:pointer;transition:all .12s}
-    .dropzone:hover{transform:translateY(-4px);box-shadow:var(--shadow-sm);border-color:var(--accent)}
-    .drop-inner{display:flex;gap:12px;align-items:center}
-    .drop-inner svg{width:40px;height:40px;opacity:0.95}
+    body::before {
+      content: '';
+      position: fixed;
+      inset: -40% -30% auto -20%;
+      height: 120vh;
+      background: rgba(74,212,255,0.08);
+      filter: blur(140px);
+      opacity: 0.9;
+      z-index: -2;
+      animation: breathe 26s ease-in-out infinite;
+    }
 
-    input[type="file"]{position:absolute;left:-9999px}
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"%3E%3Ccircle cx="4" cy="4" r="1" fill="rgba(255,255,255,0.04)"/%3E%3C/svg%3E');
+      opacity: 0.65;
+      pointer-events: none;
+      z-index: -1;
+    }
 
-    .file-chooser{display:flex;gap:10px;align-items:center}
-    .choose-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text);cursor:pointer;transition:all .12s}
-    .choose-btn:hover{transform:translateY(-3px);box-shadow:var(--shadow-sm);border-color:var(--accent)}
-    .file-name{font-size:13px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    ::-webkit-scrollbar { width: 12px; }
+    ::-webkit-scrollbar-track { background-color: rgba(9,13,24,0.8); border-radius: 12px; }
+    ::-webkit-scrollbar-thumb {
+      background-color: rgba(94,151,255,0.72);
+      border-radius: 12px;
+      border: 2px solid rgba(5,8,14,0.92);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+      transition: background-color 0.3s ease;
+    }
+    ::-webkit-scrollbar-thumb:hover { background-color: rgba(255,93,135,0.85); }
 
-    .upload-controls{display:flex;gap:12px;align-items:center;margin-top:8px}
-    .preview{width:64px;height:64px;border-radius:10px;overflow:hidden;border:1px solid var(--border);background:rgba(255,255,255,0.01);display:flex;align-items:center;justify-content:center}
-    .preview img{width:100%;height:100%;object-fit:cover}
+    a { color: inherit; text-decoration: none; }
 
-    hr{border:0;border-top:1px solid rgba(255,255,255,0.02);margin:12px 0}
-    .sxcu-row{display:flex;gap:10px;align-items:center}
+    .container {
+      width: min(1180px, 92vw);
+      margin: 0 auto;
+      position: relative;
+      z-index: 2;
+    }
 
-    /* Gallery */
-    .images-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px}
-    .img-card{border-radius:10px;overflow:hidden;border:1px solid var(--border);background:rgba(255,255,255,0.01);display:flex;flex-direction:column;transition:transform .14s,box-shadow .14s;cursor:pointer}
-    .img-card:hover{transform:translateY(-8px);box-shadow:var(--shadow-lg);border-color:var(--accent)}
-    .img-thumb{width:100%;height:130px;object-fit:cover;background:#081120}
-    .img-meta{display:flex;align-items:center;justify-content:space-between;padding:10px;font-size:13px;color:var(--muted)}
-    .meta-left{display:flex;gap:8px;align-items:center}
-    .meta-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .meta-actions{display:flex;gap:8px;align-items:center}
-    .meta-actions button{background:transparent;border:1px solid transparent;color:var(--muted);padding:6px;border-radius:8px;cursor:pointer}
-    .meta-actions button:hover{background:rgba(255,255,255,0.02);color:var(--text)}
+    .topbar {
+      position: sticky;
+      top: 18px;
+      z-index: 50;
+      width: min(1180px, 92vw);
+      margin: 0 auto 38px;
+      border-radius: 32px;
+      background: rgba(15,22,36,0.9);
+      border: 1px solid var(--outline);
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(22px);
+      padding: 16px 22px;
+    }
 
-    .empty{padding:28px;text-align:center;border-radius:10px;background:rgba(255,255,255,0.01);border:1px dashed rgba(255,255,255,0.02)}
+    .topbar::after {
+      content: '';
+      position: absolute;
+      inset: 2px;
+      border-radius: 30px;
+      border: 1px solid rgba(255,255,255,0.04);
+      pointer-events: none;
+    }
 
-    /* Modal preview */
-    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,0.72);z-index:80}
-    .modal.show{display:flex}
-    .modal-inner{background:var(--panel);padding:16px;border-radius:12px;border:1px solid var(--border);max-width:920px;width:calc(100% - 40px);box-shadow:var(--shadow-lg)}
-    .modal-inner img{max-width:100%;max-height:70vh;border-radius:8px;display:block;margin-bottom:12px}
-    .modal-actions{display:flex;justify-content:flex-end;gap:8px}
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
 
-    @media (max-width:980px){
-      .main-grid{grid-template-columns:1fr;gap:14px}
-      .upload-card,.gallery-card{grid-column:auto}
-      .img-thumb{height:120px}
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .brand-name {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      font-size: 1.32rem;
+      letter-spacing: 0.04em;
+    }
+
+    .brand-name span {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .brand-name .prefix { color: var(--text); }
+    .brand-name .suffix { color: var(--accent); }
+
+    .brand-mark {
+      width: 46px;
+      height: 46px;
+      border-radius: 18px;
+      object-fit: cover;
+      border: 1px solid var(--outline);
+      box-shadow: 0 16px 40px rgba(6,10,22,0.48);
+      background: rgba(8,12,24,0.9);
+    }
+
+    .brand-subtitle {
+      display: block;
+      font-size: 0.8rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .link {
+      font-size: 0.92rem;
+      padding: 10px 16px;
+      border-radius: 999px;
+      color: var(--muted);
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+    .link:hover { background: rgba(84,116,196,0.18); color: var(--text); }
+
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .btn {
+      font-weight: 600;
+      border-radius: 18px;
+      padding: 11px 20px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      font-size: 0.95rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
+    }
+
+    .btn.primary {
+      background: var(--accent);
+      color: #04101e;
+      box-shadow: 0 20px 40px rgba(74,212,255,0.35);
+    }
+    .btn.primary:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 26px 54px rgba(74,212,255,0.45);
+      background: var(--accent-strong);
+    }
+
+    .btn.ghost {
+      background: rgba(20,28,46,0.72);
+      border: 1px solid var(--outline);
+      color: var(--text);
+    }
+    .btn.ghost:hover { transform: translateY(-3px); box-shadow: var(--shadow-sm); }
+
+    .btn.logout {
+      background: rgba(24,30,46,0.82);
+      border: 1px solid var(--outline);
+      color: var(--text);
+    }
+    .btn.logout:hover {
+      background: var(--warn);
+      border-color: rgba(255,255,255,0.12);
+      color: #fff;
+      box-shadow: 0 20px 46px rgba(255,61,97,0.42);
+    }
+
+    .hero {
+      padding: 120px 0 100px;
+      position: relative;
+    }
+
+    .hero::before,
+    .hero::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.35;
+      pointer-events: none;
+      background: rgba(84,130,255,0.18);
+      filter: blur(60px);
+    }
+
+    .hero::before {
+      width: 420px;
+      height: 420px;
+      top: -140px;
+      left: -140px;
+      animation: floatOne 18s ease-in-out infinite;
+    }
+
+    .hero::after {
+      width: 360px;
+      height: 360px;
+      bottom: -100px;
+      right: -120px;
+      animation: floatTwo 22s ease-in-out infinite;
+    }
+
+    .hero-inner {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 40px;
+      align-items: center;
+    }
+
+    .hero-copy {
+      grid-column: span 7;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.78rem;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--outline);
+      background: rgba(16,24,40,0.85);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2.6rem, 4vw, 3.8rem);
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--text-soft);
+      max-width: 540px;
+      font-size: 1.05rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .hero-stats {
+      grid-column: span 5;
+      background: var(--surface-soft);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--outline);
+      padding: 28px;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-stats::before,
+    .hero-stats::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.08);
+      border-radius: 48% 52% 58% 42%;
+      filter: blur(0px);
+      opacity: 0.55;
+      pointer-events: none;
+    }
+
+    .hero-stats::before {
+      width: 180px;
+      height: 180px;
+      top: -70px;
+      right: -50px;
+      animation: liquidDrift 20s linear infinite;
+    }
+
+    .hero-stats::after {
+      width: 140px;
+      height: 140px;
+      bottom: -40px;
+      left: -30px;
+      animation: liquidDrift 26s linear infinite reverse;
+    }
+
+    .stat-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 16px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .stat:last-child { border-bottom: 0; }
+
+    .stat strong { font-size: 2rem; letter-spacing: -0.02em; }
+    .stat span { color: var(--muted); font-size: 0.9rem; max-width: 200px; }
+
+    .main-grid-wrapper {
+      position: relative;
+      margin-top: -40px;
+      padding-bottom: 80px;
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 26px;
+    }
+
+    .card {
+      background: var(--surface-soft);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--outline);
+      padding: 30px;
+      box-shadow: var(--shadow-md);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      width: 220px;
+      height: 220px;
+      top: -110px;
+      right: -80px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 50%;
+      filter: blur(0px);
+      opacity: 0.55;
+      animation: liquidSheen 24s linear infinite;
+      pointer-events: none;
+    }
+
+    .card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: 1px solid rgba(255,255,255,0.04);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      pointer-events: none;
+    }
+
+    .card:hover {
+      transform: translateY(-10px);
+      box-shadow: var(--shadow-lg);
+      border-color: var(--outline-strong);
+    }
+    .card:hover::after { opacity: 1; }
+
+    .is-hidden {
+      opacity: 0;
+      transform: translateY(28px);
+    }
+
+    .revealed {
+      opacity: 1;
+      transform: translateY(0);
+      transition: transform 0.6s cubic-bezier(.16,1,.3,1), opacity 0.6s ease;
+    }
+
+    .upload-card { grid-column: span 5; display: flex; flex-direction: column; gap: 22px; }
+    .gallery-card { grid-column: span 7; display: flex; flex-direction: column; gap: 22px; min-height: 360px; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      letter-spacing: 0.04em;
+    }
+
+    .muted { color: var(--muted); }
+
+    .dropzone {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 22px 24px;
+      border-radius: var(--radius-md);
+      border: 1px dashed rgba(255,255,255,0.18);
+      background: rgba(17,25,42,0.84);
+      cursor: pointer;
+      transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+      outline: none;
+    }
+
+    .dropzone .icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background: rgba(34,44,68,0.9);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    .dropzone strong { font-size: 1.08rem; display: block; margin-bottom: 4px; }
+    .dropzone span { color: var(--muted); font-size: 0.92rem; }
+
+    .dropzone.is-hovered {
+      border-color: rgba(255,255,255,0.34);
+      transform: translateY(-4px);
+      box-shadow: 0 26px 56px rgba(6,10,22,0.5);
+    }
+
+    .file-chooser {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    input[type="file"] { position: absolute; left: -9999px; }
+
+    .choose-btn {
+      background: rgba(21,30,48,0.78);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      color: var(--text);
+      padding: 10px 18px;
+      cursor: pointer;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .choose-btn:hover { transform: translateY(-3px); box-shadow: var(--shadow-sm); }
+
+    .file-name {
+      font-size: 0.85rem;
+      color: var(--muted);
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .upload-form { display: flex; flex-direction: column; gap: 20px; }
+
+    .upload-controls {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .preview {
+      width: 72px;
+      height: 72px;
+      border-radius: 16px;
+      background: rgba(22,30,48,0.82);
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255,255,255,0.06);
+      overflow: hidden;
+    }
+
+    .preview img { width: 100%; height: 100%; object-fit: cover; }
+
+    #uploadStatus { min-height: 20px; font-size: 0.9rem; color: var(--muted); transition: opacity 0.3s ease; }
+
+    .images-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 18px;
+    }
+
+    .img-card {
+      background: rgba(18,26,44,0.88);
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.06);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .img-card:hover {
+      transform: translateY(-6px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .img-thumb { width: 100%; height: 140px; object-fit: cover; background: rgba(15,20,32,0.8); }
+
+    .img-meta {
+      padding: 14px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .meta-name { font-size: 0.92rem; font-weight: 500; color: var(--text); word-break: break-word; }
+
+    .meta-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+    .meta-actions button,
+    .meta-actions a {
+      background: rgba(26,34,56,0.78);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 0.82rem;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: transform 0.22s ease, background-color 0.22s ease;
+    }
+
+    .meta-actions button:hover,
+    .meta-actions a:hover {
+      transform: translateY(-2px);
+      background: rgba(255,255,255,0.08);
+    }
+
+    .empty { text-align: center; padding: 60px 20px; border: 1px dashed rgba(255,255,255,0.12); border-radius: 20px; background: rgba(15,22,36,0.6); }
+
+    .liquid-deck {
+      margin-top: 40px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 22px;
+    }
+
+    .liquid-card {
+      position: relative;
+      padding: 28px;
+      border-radius: var(--radius-lg);
+      background: rgba(17,26,44,0.88);
+      border: 1px solid var(--outline);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      min-height: 220px;
+    }
+
+    .liquid-card::before,
+    .liquid-card::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.08);
+      border-radius: 52% 48% 60% 40%;
+      filter: blur(0px);
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .liquid-card::before {
+      width: 180px;
+      height: 180px;
+      top: -90px;
+      right: -70px;
+      animation: liquidDrift 26s linear infinite;
+    }
+
+    .liquid-card::after {
+      width: 150px;
+      height: 150px;
+      bottom: -70px;
+      left: -60px;
+      animation: liquidDrift 22s linear infinite reverse;
+    }
+
+    .liquid-card h3 {
+      margin-top: 0;
+      font-size: 1.2rem;
+    }
+
+    .liquid-card p {
+      margin-bottom: 0;
+      color: var(--text-soft);
+      font-size: 0.95rem;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      color: var(--muted);
+      font-size: 0.75rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .activity {
+      margin: 80px auto 40px;
+      display: grid;
+      gap: 24px;
+    }
+
+    .activity-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 18px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 18px;
+      align-items: start;
+      background: rgba(18,26,44,0.82);
+      border-radius: 20px;
+      padding: 18px 20px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .timeline-time {
+      font-size: 0.78rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .timeline-body strong { display: block; font-size: 1rem; margin-bottom: 6px; }
+    .timeline-body span { color: var(--text-soft); font-size: 0.9rem; }
+
+    .cta-strip {
+      margin: 80px 0 70px;
+      background: rgba(18,26,46,0.9);
+      border: 1px solid var(--outline);
+      border-radius: var(--radius-lg);
+      padding: 36px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+      box-shadow: var(--shadow-md);
+    }
+
+    .cta-strip h2 { margin: 0; font-size: 1.6rem; }
+    .cta-strip p { margin: 0; color: var(--muted); }
+
+    .footer {
+      padding: 40px 0 70px;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(4,6,12,0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 16px;
+      z-index: 100;
+    }
+
+    .modal.show { display: flex; }
+
+    .modal-inner {
+      position: relative;
+      background: rgba(14,20,34,0.95);
+      border-radius: 24px;
+      padding: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+      max-width: 960px;
+      width: min(96vw, 960px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .modal-inner img {
+      max-width: 100%;
+      max-height: 70vh;
+      border-radius: 18px;
+      display: block;
+      margin-bottom: 18px;
+    }
+
+    .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+
+    .modal-actions .btn { padding: 10px 18px; font-size: 0.9rem; }
+
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 18px;
+      background: rgba(24,32,52,0.82);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--text);
+      border-radius: 999px;
+      width: 36px;
+      height: 36px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+    .modal-close:hover { background: rgba(255,255,255,0.12); }
+
+    @keyframes breathe {
+      0%,100% { transform: translate3d(0,0,0) scale(1); }
+      50% { transform: translate3d(4%, -4%, 0) scale(1.05); }
+    }
+
+    @keyframes floatOne {
+      0%,100% { transform: translate3d(0,0,0); }
+      50% { transform: translate3d(20px, -10px, 0); }
+    }
+
+    @keyframes floatTwo {
+      0%,100% { transform: translate3d(0,0,0); }
+      50% { transform: translate3d(-30px, 18px, 0); }
+    }
+
+    @keyframes liquidDrift {
+      0% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(180deg) scale(1.05); }
+      100% { transform: rotate(360deg) scale(1); }
+    }
+
+    @keyframes liquidSheen {
+      0% { transform: translate3d(0,0,0); opacity: 0.45; }
+      50% { transform: translate3d(-40px, 30px, 0); opacity: 0.7; }
+      100% { transform: translate3d(0,0,0); opacity: 0.45; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      .hero-inner { grid-template-columns: 1fr; }
+      .hero-copy { grid-column: auto; text-align: center; align-items: center; }
+      .hero p { max-width: none; }
+      .hero-actions { justify-content: center; }
+      .hero-stats { grid-column: auto; }
+      .topbar { top: 12px; margin-bottom: 26px; }
+    }
+
+    @media (max-width: 940px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .upload-card, .gallery-card { grid-column: auto; }
+      .cta-strip { flex-direction: column; align-items: flex-start; }
+      .activity-header { align-items: flex-start; }
+    }
+
+    @media (max-width: 640px) {
+      .topbar-inner { flex-direction: column; align-items: flex-start; }
+      .brand { align-items: flex-start; }
+      .hero { padding: 100px 0 70px; }
+      .upload-controls { flex-direction: column; align-items: stretch; }
+      .preview { width: 100%; height: 140px; }
+      .file-chooser { flex-direction: column; align-items: stretch; }
+      .file-name { max-width: none; }
+      .meta-actions { flex-direction: column; align-items: stretch; }
+      .cta-strip { padding: 28px; }
     }
   </style>
 </head>
 <body>
   <header class="topbar" role="banner">
-    <div class="container topbar-inner">
-      <a class="brand" href="/" aria-label="Edge Home">
-        <img src="/public/adsetups.png" alt="adsetups" class="brand-logo" onerror="this.style.display='none'">
-        <div class="brand-text">
-          <strong>Edge</strong>
-          <small class="muted">Uploader Dashboard</small>
+    <div class="topbar-inner">
+      <a class="brand" href="/" aria-label="ADEdge home">
+        <div>
+          <div class="brand-name">
+            <span class="prefix">AD</span>
+            <img src="https://files.catbox.moe/bmjajo.webp" alt="ADEdge emblem" class="brand-mark" />
+            <span class="suffix">Edge</span>
+          </div>
+          <span class="brand-subtitle">Creative delivery console</span>
         </div>
       </a>
 
       <nav class="top-actions" aria-label="Top actions">
-        <a class="link" href="/settings.html" id="settingsLink">Settings</a>
-        <button id="logoutBtn" class="btn ghost">Log out</button>
+        <a class="link" href="/settings.html">Settings</a>
+        <button id="logoutBtn" class="btn logout" type="button">Log out</button>
       </nav>
     </div>
   </header>
 
-  <main class="container main-grid" id="main">
-    <section class="card upload-card" aria-labelledby="uploadTitle">
-      <div class="card-header">
-        <div>
-          <h2 id="uploadTitle">Upload</h2>
-          <p class="muted">Drag & drop or choose an image to upload (token-protected)</p>
+  <section class="hero" aria-labelledby="heroTitle">
+    <div class="container hero-inner">
+      <div class="hero-copy">
+        <span class="eyebrow">Creative delivery control</span>
+        <h1 id="heroTitle">Distribute media with a dashboard built for live campaigns.</h1>
+        <p>ADEdge keeps visual assets moving fast. Upload, organize, and share production-ready images or video instantly while the control panel highlights the health of your delivery footprint.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="#main">Start uploading</a>
+          <span class="muted">Liquid glass UI · Realtime focus</span>
         </div>
-        <div class="small-muted">Quick actions</div>
       </div>
-
-      <div class="dropzone-wrap">
-        <label class="dropzone" id="dropzone" tabindex="0" aria-label="Drop image here or click to select">
-          <div class="drop-inner">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M5 10l7-7 7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
-            <div>
-              <strong>Drop image here</strong>
-              <div class="muted">or click the button below to choose a file</div>
-            </div>
+      <aside class="hero-stats" aria-label="Network highlights">
+        <div class="pill">Realtime insights</div>
+        <div class="stat-grid">
+          <div class="stat">
+            <strong>248</strong>
+            <span>PoP locations currently streaming with <abbr title="Edge cache hydration">cache hydration</abbr>.</span>
           </div>
-        </label>
+          <div class="stat">
+            <strong>6.2ms</strong>
+            <span>Median response from North America testing nodes.</span>
+          </div>
+          <div class="stat">
+            <strong>99.99%</strong>
+            <span>Delivery uptime tracked over the last 30 days.</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <div class="main-grid-wrapper" id="main">
+    <main class="container main-grid">
+      <section class="card upload-card" aria-labelledby="uploadTitle">
+        <div class="card-header">
+          <div>
+            <h2 id="uploadTitle">Upload center</h2>
+            <p class="muted">Drop a file or use the picker. ADEdge will store it behind your token-protected endpoint.</p>
+          </div>
+          <div class="pill">Secure</div>
+        </div>
+
+        <div class="dropzone" id="dropzone" tabindex="0" aria-label="Drop media here or press to browse">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none"><path d="M12 5v14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M5 12l7-7 7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div>
+            <strong>Drop media to upload</strong>
+            <span>Images, GIFs, MP4 previews — ADEdge handles them in seconds.</span>
+          </div>
+        </div>
 
         <div class="file-chooser" role="group" aria-label="File chooser">
-          <input type="file" id="fileInput" name="file" accept="image/*" aria-hidden="true">
+          <input type="file" id="fileInput" name="file" accept="image/*,video/*" aria-hidden="true">
           <button id="chooseBtn" type="button" class="choose-btn">Choose file</button>
-          <div class="file-name" id="fileName">No file chosen</div>
+          <div class="file-name" id="fileName">No file selected</div>
         </div>
-      </div>
 
-      <form id="uploadForm" class="upload-form" novalidate>
-        <div class="upload-controls">
-          <button type="submit" class="btn primary">Upload</button>
-          <div class="preview" id="filePreview" aria-hidden="true">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10l4-4 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 6v8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <form id="uploadForm" class="upload-form" novalidate>
+          <div class="upload-controls">
+            <button type="submit" class="btn primary">Upload now</button>
+            <div class="preview" id="filePreview" aria-hidden="true">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 11l4-4 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div id="uploadStatus" aria-live="polite"></div>
           </div>
-          <div id="uploadStatus" class="muted" aria-live="polite" style="opacity:0.9"></div>
+        </form>
+      </section>
+
+      <section class="card gallery-card" aria-labelledby="galleryTitle">
+        <div class="card-header">
+          <h2 id="galleryTitle">Recent media</h2>
+          <p class="muted">Latest uploads hydrate automatically so you can copy, preview, or open the CDN URL.</p>
         </div>
-      </form>
 
-      <hr />
+        <div id="imagesGrid" class="images-grid" role="list" aria-live="polite"></div>
 
-      <h3>Generate .sxcu</h3>
-      <div class="sxcu-row">
-        <button id="genBinary" class="btn flat">Generate .sxcu (Binary)</button>
-        <button id="genMultipart" class="btn flat">Generate .sxcu (Multipart)</button>
-        <div id="downloadLink" class="download-area" aria-live="polite"></div>
+        <div id="galleryEmpty" class="empty muted" hidden>
+          There are no uploads yet — send your first asset to unlock the live gallery.
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <section class="container liquid-deck" aria-label="Workflow boosters">
+    <article class="liquid-card">
+      <div class="pill">Automation</div>
+      <h3>Version-aware asset lanes</h3>
+      <p>Tag revisions, sync shareable links, and let collaborators fetch the freshest creative without touching configuration files.</p>
+    </article>
+    <article class="liquid-card">
+      <div class="pill">Monitoring</div>
+      <h3>Heat-aware health checks</h3>
+      <p>Monitor spikes in demand with adaptive probes that surface region latency and CDN cache responses right inside the console.</p>
+    </article>
+    <article class="liquid-card">
+      <div class="pill">Collaboration</div>
+      <h3>Instant campaign kits</h3>
+      <p>Bundle hero images, ad variants, and motion loops into a single share card, complete with copy-to-clipboard shortcuts.</p>
+    </article>
+  </section>
+
+  <section class="container activity" aria-label="Live activity">
+    <div class="activity-header">
+      <div>
+        <div class="pill">Live feed</div>
+        <h2>Operations timeline</h2>
       </div>
-    </section>
+      <span class="muted">Auto-refreshes while the dashboard stays open.</span>
+    </div>
 
-    <section class="card gallery-card" aria-labelledby="galleryTitle">
-      <div class="card-header">
-        <h2 id="galleryTitle">Gallery</h2>
-        <div class="muted">Recent uploads</div>
+    <div class="timeline" id="activityStream">
+      <div class="timeline-item">
+        <div class="timeline-time">00:12</div>
+        <div class="timeline-body">
+          <strong>Upload ready</strong>
+          <span>Binary endpoint warmed for new creative batches.</span>
+        </div>
       </div>
-
-      <div id="imagesGrid" class="images-grid" role="list" aria-live="polite"></div>
-
-      <div id="galleryEmpty" class="empty muted" hidden>
-        No images yet — upload your first image to get started.
+      <div class="timeline-item">
+        <div class="timeline-time">00:35</div>
+        <div class="timeline-body">
+          <strong>Realtime audit</strong>
+          <span>Security token verified and stored for ShareX integrations.</span>
+        </div>
       </div>
-    </section>
-  </main>
+      <div class="timeline-item">
+        <div class="timeline-time">01:10</div>
+        <div class="timeline-body">
+          <strong>Viewport sync</strong>
+          <span>Latest thumbnails rendered in the liquid glass gallery grid.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="container cta-strip" aria-label="Collaboration callout">
+    <div>
+      <h2>Scale creative delivery with ADEdge</h2>
+      <p>Invite your team, automate uploads, and keep every campaign asset at your fingertips.</p>
+    </div>
+    <a class="btn ghost" href="#uploadTitle">Return to uploader</a>
+  </section>
 
   <footer class="container footer">
-    <small class="muted">Edge uploader • Token-protected uploads • Manage token in Settings</small>
+    <small>ADEdge · Token-protected uploads · Manage access in Settings</small>
   </footer>
 
-  <!-- Modal preview -->
-  <div id="previewModal" class="modal" role="dialog" aria-modal="true">
+  <div id="previewModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-inner">
-      <button id="modalClose" style="position:absolute;right:18px;top:12px;background:transparent;border:0;color:var(--text);font-size:18px;cursor:pointer">✕</button>
-      <img id="modalImg" src="" alt="Preview">
-      <div class="modal-actions" style="margin-top:8px">
-        <button id="copyUrl" class="btn flat">Copy URL</button>
-        <a id="openInNew" class="btn primary" href="#" target="_blank" rel="noopener">Open</a>
+      <button id="modalClose" class="modal-close" type="button" aria-label="Close preview">✕</button>
+      <h2 id="modalTitle" class="visually-hidden">Asset preview</h2>
+      <img id="modalImg" src="" alt="Preview" />
+      <div class="modal-actions">
+        <button id="copyUrl" class="btn ghost" type="button">Copy URL</button>
+        <a id="openInNew" class="btn primary" href="#" target="_blank" rel="noopener">Open asset</a>
       </div>
     </div>
   </div>
 
   <script>
     (function(){
-      // Elements (IDs preserved)
+      const TOKEN_KEY = 'uploadToken';
+      const FALLBACK_BASE = '/uploads/';
+
       const dropzone = document.getElementById('dropzone');
       const fileInput = document.getElementById('fileInput');
       const chooseBtn = document.getElementById('chooseBtn');
@@ -205,11 +1041,9 @@
       const uploadForm = document.getElementById('uploadForm');
       const filePreview = document.getElementById('filePreview');
       const uploadStatus = document.getElementById('uploadStatus');
-      const genBinary = document.getElementById('genBinary');
-      const genMultipart = document.getElementById('genMultipart');
-      const downloadLink = document.getElementById('downloadLink');
       const imagesGrid = document.getElementById('imagesGrid');
       const galleryEmpty = document.getElementById('galleryEmpty');
+      const logoutBtn = document.getElementById('logoutBtn');
 
       const previewModal = document.getElementById('previewModal');
       const modalImg = document.getElementById('modalImg');
@@ -217,267 +1051,266 @@
       const copyUrlBtn = document.getElementById('copyUrl');
       const openInNew = document.getElementById('openInNew');
 
-      // If backend returns filenames (without path), prefix this base.
-      // YOU SAID: backend uses uploads/imagine -> use that as base.
-      const FALLBACK_BASE = '/uploads/imagine/';
-
-      // token helpers (optional)
-      function getStoredToken(){ return localStorage.getItem('uploadToken') || null; }
-      function setStoredToken(t){ if(t) localStorage.setItem('uploadToken', t); else localStorage.removeItem('uploadToken'); }
-
-      // choose button
-      chooseBtn.addEventListener('click', () => fileInput.click());
-      dropzone.addEventListener('click', () => fileInput.click());
-
-      // drag & drop
-      ['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, e => {
-        e.preventDefault(); dropzone.style.borderColor = 'var(--accent)'; dropzone.style.transform = 'translateY(-4px)';
-      }));
-      ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => {
-        e.preventDefault(); dropzone.style.borderColor = ''; dropzone.style.transform = '';
-      }));
-      dropzone.addEventListener('drop', e => {
-        const f = e.dataTransfer.files && e.dataTransfer.files[0];
-        if(f){ fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
-      });
-
-      // preview selected file
-      fileInput.addEventListener('change', () => {
-        const f = fileInput.files && fileInput.files[0];
-        if(!f){
-          fileNameEl.textContent = 'No file chosen';
-          filePreview.innerHTML = '';
-          return;
-        }
-        fileNameEl.textContent = f.name || 'file';
-        const url = URL.createObjectURL(f);
-        filePreview.innerHTML = '<img src="'+url+'" alt="preview">';
-      });
-
-      // upload
-      uploadForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const f = fileInput.files && fileInput.files[0];
-        if(!f){ showStatus('Please select a file first'); return; }
-        const fd = new FormData(); fd.append('file', f);
-        const token = getStoredToken();
-        try{
-          showStatus('Uploading...');
-          const res = await fetch('/api/upload', {
-            method: 'POST',
-            headers: token ? { 'Authorization': 'Bearer ' + token } : {},
-            body: fd
-          });
-          if(!res.ok){
-            const t = await res.text().catch(()=>null);
-            throw new Error(t || 'Upload failed');
-          }
-          showStatus('Upload successful');
-          fileInput.value = '';
-          fileNameEl.textContent = 'No file chosen';
-          filePreview.innerHTML = '';
-          await loadGallery();
-        }catch(err){
-          console.error(err);
-          showStatus('Upload failed: ' + (err.message || err));
-        }
-      });
-
-      // generate .sxcu
-      async function generateSxcu(mode){
-        const token = getStoredToken();
-        try{
-          showStatus('Generating .sxcu...');
-          const res = await fetch('/api/generate-sxcu?type='+encodeURIComponent(mode), {
-            method: 'POST',
-            headers: token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode })
-          });
-          if(!res.ok){ const t = await res.text().catch(()=>null); throw new Error(t || 'Failed'); }
-          const blob = await res.blob();
-          const fileName = 'edge-' + mode + '.sxcu';
-          const url = URL.createObjectURL(blob);
-          downloadLink.innerHTML = '<a class="btn flat" href="'+url+'" download="'+fileName+'">Download '+fileName+'</a>';
-          showStatus('.sxcu ready');
-        }catch(err){
-          console.error(err);
-          showStatus('Failed to generate .sxcu: ' + (err.message || err));
-        }
+      function getStoredToken(){
+        try { return localStorage.getItem(TOKEN_KEY) || null; }
+        catch(e){ return null; }
       }
-      genBinary && genBinary.addEventListener('click', () => generateSxcu('binary'));
-      genMultipart && genMultipart.addEventListener('click', () => generateSxcu('multipart'));
 
-      // === loadGallery: robust handling ===
-      async function loadGallery(){
-        try{
-          imagesGrid.innerHTML = '<div class="muted">Loading gallery…</div>';
-          const res = await fetch('/api/images');
-          if(!res.ok) throw new Error('Server returned ' + res.status);
+      function setStoredToken(token){
+        try {
+          if(token) localStorage.setItem(TOKEN_KEY, token);
+          else localStorage.removeItem(TOKEN_KEY);
+        } catch(e){ /* ignore */ }
+      }
 
-          // Try JSON first
-          let parsed;
-          try{
-            parsed = await res.json();
-          }catch(jsonErr){
-            // fallback: some servers may return newline-separated list or plain text
-            const text = await res.text();
-            console.warn('Fallback: /api/images returned non-JSON. Raw response:', text);
-            // split by newlines and remove empty lines
-            parsed = text.split(/[\r\n]+/).map(s => s.trim()).filter(Boolean);
+      if(logoutBtn){
+        logoutBtn.addEventListener('click', async () => {
+          try { await fetch('/api/logout', { method: 'POST' }); } catch(e){ /* ignore */ }
+          setStoredToken(null);
+          window.location.href = '/login';
+        });
+      }
+
+      if(dropzone){
+        const toggleHover = (state) => dropzone.classList.toggle('is-hovered', state);
+        ['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); toggleHover(true); }));
+        ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); toggleHover(false); }));
+        dropzone.addEventListener('drop', e => {
+          const files = e.dataTransfer.files;
+          if(files && files[0]){
+            fileInput.files = files;
+            fileInput.dispatchEvent(new Event('change'));
           }
-
-          console.log('DEBUG /api/images parsed:', parsed);
-
-          // Normalize to array of objects {url, name}
-          let items = Array.isArray(parsed) ? parsed.slice() : [];
-          // If object with property 'files' or similar, try to extract it
-          if(items.length === 0 && parsed && typeof parsed === 'object'){
-            // common patterns: {files: [...]} or {images: [...]}
-            if(Array.isArray(parsed.files)) items = parsed.files.slice();
-            else if(Array.isArray(parsed.images)) items = parsed.images.slice();
-            else {
-              // last resort: try to use values
-              items = Object.values(parsed).flat().filter(Boolean);
-            }
+        });
+        dropzone.addEventListener('click', () => fileInput && fileInput.click());
+        dropzone.addEventListener('keydown', e => {
+          if(e.key === 'Enter' || e.key === ' '){
+            e.preventDefault();
+            fileInput && fileInput.click();
           }
+        });
+      }
 
-          // if nothing, show empty
-          if(!Array.isArray(items) || items.length === 0){
-            imagesGrid.innerHTML = '';
-            galleryEmpty.hidden = false;
+      if(chooseBtn) chooseBtn.addEventListener('click', () => fileInput && fileInput.click());
+
+      if(fileInput){
+        fileInput.addEventListener('change', () => {
+          const file = fileInput.files && fileInput.files[0];
+          if(!file){
+            fileNameEl.textContent = 'No file selected';
+            filePreview.innerHTML = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 11l4-4 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            return;
+          }
+          fileNameEl.textContent = file.name;
+          const url = URL.createObjectURL(file);
+          filePreview.innerHTML = `<img src="${url}" alt="Selected preview">`;
+        });
+      }
+
+      if(uploadForm){
+        uploadForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const file = fileInput && fileInput.files && fileInput.files[0];
+          if(!file){
+            showStatus('Select a file before uploading.');
             return;
           }
 
-          // Map items to consistent objects
-          const normalized = items.map(it => {
-            if(typeof it === 'string'){
-              const s = it.trim();
-              // if already absolute URL or begins with slash -> use as-is
-              if(/^https?:\/\//i.test(s) || s.startsWith('/')) return { url: s, name: s.split('/').pop() };
-              // else treat as filename from uploads/imagine
-              return { url: FALLBACK_BASE + encodeURIComponent(s), name: s };
+          const form = new FormData();
+          form.append('file', file);
+          const headers = {};
+          const token = getStoredToken();
+          if(token) headers['Authorization'] = 'Bearer ' + token;
+
+          try {
+            showStatus('Uploading…');
+            const res = await fetch('/api/upload', { method: 'POST', headers, body: form });
+            if(!res.ok){
+              const message = await res.text();
+              throw new Error(message || 'Upload failed');
             }
-            // if object, try to glean url or path
-            if(typeof it === 'object' && it !== null){
-              const url = it.url || it.path || it.href || it.src || '';
-              const name = it.name || (url && url.split('/').pop()) || '';
-              if(url){
-                // if url is relative filename without slash, prefix base
-                if(!/^https?:\/\//i.test(url) && !url.startsWith('/')){
-                  return { url: FALLBACK_BASE + encodeURIComponent(url), name };
-                }
-                return { url, name };
-              }
-              // if object looks like just filename properties
-              if(it.filename) return { url: FALLBACK_BASE + encodeURIComponent(it.filename), name: it.filename };
-            }
-            return null;
-          }).filter(Boolean);
-
-          // render
-          galleryEmpty.hidden = true;
-          imagesGrid.innerHTML = '';
-          normalized.forEach(i => {
-            const url = i.url;
-            const name = i.name || (url.split('/').pop());
-            const card = document.createElement('div'); card.className = 'img-card';
-            const img = document.createElement('img'); img.className = 'img-thumb'; img.src = url; img.alt = name; img.loading = 'lazy';
-            // fallback image if cannot load
-            img.onerror = function(){ this.src = '/public/image-fallback.png'; };
-            const meta = document.createElement('div'); meta.className = 'img-meta';
-            const left = document.createElement('div'); left.className = 'meta-left';
-            const nm = document.createElement('div'); nm.className = 'meta-name'; nm.textContent = name;
-            left.appendChild(nm);
-            const actions = document.createElement('div'); actions.className = 'meta-actions';
-            const copyBtn = document.createElement('button'); copyBtn.className = 'btn flat'; copyBtn.type = 'button'; copyBtn.textContent = 'Copy';
-            const openA = document.createElement('a'); openA.className = 'btn flat'; openA.href = url; openA.target = '_blank'; openA.rel = 'noopener noreferrer'; openA.textContent = 'Open';
-            actions.appendChild(copyBtn); actions.appendChild(openA);
-            meta.appendChild(left); meta.appendChild(actions);
-            card.appendChild(img); card.appendChild(meta);
-
-            // interactions
-            img.addEventListener('click', () => openPreview(url));
-            copyBtn.addEventListener('click', (ev) => { ev.stopPropagation(); copyToClipboard(url); });
-
-            imagesGrid.appendChild(card);
-          });
-
-        }catch(err){
-          console.error('loadGallery error:', err);
-          imagesGrid.innerHTML = '<div class="muted">Încărcare galerie eșuată — verifică endpointul <code>/api/images</code> (vezi console).</div>';
-        }
-      }
-
-      // initial load on page open
-      loadGallery();
-
-      // modal preview
-      function openPreview(url){
-        modalImg.src = url;
-        previewModal.classList.add('show');
-        previewModal.style.display = 'flex';
-        openInNew.href = url;
-        copyUrlBtn.onclick = () => copyToClipboard(url);
-      }
-      modalClose.addEventListener('click', closeModal);
-      previewModal.addEventListener('click', (ev) => { if(ev.target === previewModal) closeModal(); });
-      function closeModal(){ previewModal.style.display = 'none'; previewModal.classList.remove('show'); modalImg.src = ''; }
-
-      // copy helper
-      async function copyToClipboard(text){
-        try{
-          await navigator.clipboard.writeText(text);
-          showStatus('URL copiat în clipboard');
-        }catch(e){
-          const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
-          try{ document.execCommand('copy'); showStatus('URL copiat'); }catch(err){ showStatus('Copy eșuat'); }
-          ta.remove();
-        }
+            showStatus('Upload complete. Refreshing gallery…');
+            fileInput.value = '';
+            fileNameEl.textContent = 'No file selected';
+            filePreview.innerHTML = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 11l4-4 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            loadGallery();
+          } catch(err){
+            console.error(err);
+            showStatus('Upload failed: ' + (err.message || err));
+          }
+        });
       }
 
       function showStatus(msg){
         if(!uploadStatus) return;
         uploadStatus.textContent = msg;
-        clearTimeout(uploadStatus._t);
         uploadStatus.style.opacity = '1';
-        uploadStatus._t = setTimeout(()=> uploadStatus.style.opacity = '0.75', 3000);
+        clearTimeout(uploadStatus._t);
+        uploadStatus._t = setTimeout(() => uploadStatus.style.opacity = '0.7', 3600);
       }
 
-      // small extras: generate .sxcu (kept from earlier)
-      async function generateSxcu(mode){
-        const token = getStoredToken();
-        try{
-          showStatus('Generating .sxcu...');
-          const res = await fetch('/api/generate-sxcu?type='+encodeURIComponent(mode), {
-            method: 'POST',
-            headers: token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode })
+      async function loadGallery(){
+        if(!imagesGrid) return;
+        try {
+          imagesGrid.innerHTML = '<div class="muted">Loading gallery…</div>';
+          const res = await fetch('/api/images');
+          if(!res.ok) throw new Error('Failed to load images');
+          const payload = await res.json();
+          let items = [];
+          if(Array.isArray(payload)){
+            items = payload;
+          } else if(payload){
+            if(Array.isArray(payload.items)) items = payload.items;
+            else items = Object.values(payload).flat().filter(Boolean);
+          }
+
+          if(!Array.isArray(items) || items.length === 0){
+            imagesGrid.innerHTML = '';
+            if(galleryEmpty) galleryEmpty.hidden = false;
+            return;
+          }
+
+          imagesGrid.innerHTML = '';
+          if(galleryEmpty) galleryEmpty.hidden = true;
+
+          items.forEach(item => {
+            let url = '';
+            let name = '';
+            if(typeof item === 'string'){
+              const trimmed = item.trim();
+              url = trimmed;
+              name = trimmed.split('/').pop();
+            } else if(item && typeof item === 'object'){
+              url = item.url || item.path || item.href || '';
+              name = item.name || item.filename || '';
+              if(!url && item.filename) url = item.filename;
+            }
+            if(!url) return;
+            if(!/^https?:\/\//i.test(url) && !url.startsWith('/')){
+              url = FALLBACK_BASE + encodeURIComponent(url);
+            }
+            if(!name) name = url.split('/').pop() || 'asset';
+
+            const card = document.createElement('div');
+            card.className = 'img-card';
+            card.setAttribute('role', 'listitem');
+
+            const img = document.createElement('img');
+            img.className = 'img-thumb';
+            img.src = url;
+            img.alt = name;
+            img.loading = 'lazy';
+            img.onerror = function(){ this.src = '/public/image-fallback.png'; };
+
+            const meta = document.createElement('div');
+            meta.className = 'img-meta';
+
+            const metaName = document.createElement('div');
+            metaName.className = 'meta-name';
+            metaName.textContent = name;
+
+            const actions = document.createElement('div');
+            actions.className = 'meta-actions';
+
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.textContent = 'Copy';
+
+            const openLink = document.createElement('a');
+            openLink.href = url;
+            openLink.target = '_blank';
+            openLink.rel = 'noopener noreferrer';
+            openLink.textContent = 'Open';
+
+            actions.appendChild(copyBtn);
+            actions.appendChild(openLink);
+            meta.appendChild(metaName);
+            meta.appendChild(actions);
+            card.appendChild(img);
+            card.appendChild(meta);
+            imagesGrid.appendChild(card);
+
+            img.addEventListener('click', () => openPreview(url));
+            copyBtn.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              copyToClipboard(url);
+            });
           });
-          if(!res.ok){ const t = await res.text().catch(()=>null); throw new Error(t || 'Failed'); }
-          const blob = await res.blob();
-          const fileName = 'edge-' + mode + '.sxcu';
-          const url = URL.createObjectURL(blob);
-          downloadLink.innerHTML = '<a class="btn flat" href="'+url+'" download="'+fileName+'">Download '+fileName+'</a>';
-          showStatus('.sxcu ready');
-        }catch(err){
-          console.error(err);
-          showStatus('Failed to generate .sxcu: ' + (err.message || err));
+        } catch(err){
+          console.error('loadGallery error:', err);
+          imagesGrid.innerHTML = '<div class="muted">Gallery failed to load. Check the /api/images endpoint.</div>';
         }
       }
-      (document.getElementById('genBinary')||{}).addEventListener?.('click', () => generateSxcu('binary'));
-      (document.getElementById('genMultipart')||{}).addEventListener?.('click', () => generateSxcu('multipart'));
 
-      // quick hotkey: press U to open file picker
-      window.addEventListener('keydown', (e) => {
-        if(e.key.toLowerCase() === 'u' && !/input|textarea/i.test(document.activeElement.tagName)) fileInput.click();
+      function openPreview(url){
+        if(!previewModal) return;
+        modalImg.src = url;
+        openInNew.href = url;
+        copyUrlBtn.onclick = () => copyToClipboard(url);
+        previewModal.classList.add('show');
+      }
+
+      function closeModal(){
+        if(!previewModal) return;
+        previewModal.classList.remove('show');
+        modalImg.src = '';
+      }
+
+      if(modalClose) modalClose.addEventListener('click', closeModal);
+      if(previewModal) previewModal.addEventListener('click', (e) => { if(e.target === previewModal) closeModal(); });
+
+      async function copyToClipboard(text){
+        try {
+          await navigator.clipboard.writeText(text);
+          showStatus('URL copied to clipboard.');
+        } catch(err){
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'absolute';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            document.execCommand('copy');
+            showStatus('URL copied.');
+          } catch(e) {
+            showStatus('Copy failed.');
+          }
+          ta.remove();
+        }
+      }
+
+      (function revealCards(){
+        const cards = document.querySelectorAll('.card, .liquid-card, .timeline-item, .cta-strip');
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if(entry.isIntersecting){
+              entry.target.classList.remove('is-hidden');
+              entry.target.classList.add('revealed');
+              observer.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.18 });
+
+        cards.forEach(card => {
+          card.classList.remove('revealed');
+          card.classList.add('is-hidden');
+          observer.observe(card);
+        });
+      })();
+
+      window.addEventListener('keydown', (event) => {
+        if(event.key.toLowerCase() === 'u' && fileInput && document.activeElement === document.body){
+          fileInput.click();
+        }
       });
 
-      // refresh gallery when tab visible
-      document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') loadGallery(); });
+      document.addEventListener('visibilitychange', () => {
+        if(document.visibilityState === 'visible') loadGallery();
+      });
 
-      // helper: token accessors used by some other UI flows (kept)
-      function getStoredToken(){ return localStorage.getItem('uploadToken') || null; }
-      function setStoredToken(t){ if(t) localStorage.setItem('uploadToken', t); else localStorage.removeItem('uploadToken'); }
+      loadGallery();
     })();
   </script>
 </body>
