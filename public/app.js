@@ -453,25 +453,30 @@ document.addEventListener('DOMContentLoaded', () => {
     markTemplate(pref.type === 'template' ? pref.value : null);
   }
 
+  function escapeCssUrl(url) {
+    return String(url || '').replace(/(["\\])/g, '\\$1');
+  }
+
+  function formatBackground(pref) {
+    if (!pref || !pref.value) return defaultBackground.value;
+    if (pref.type === 'color') return pref.value;
+    const escaped = escapeCssUrl(pref.value);
+    return `#040814 url("${escaped}") center/cover no-repeat fixed`;
+  }
+
   function applyBackground(pref) {
     const root = document.body;
     if (!root || !pref) return;
     root.dataset.bgType = pref.type || 'color';
+    const backgroundValue = formatBackground(pref);
+    root.style.background = backgroundValue;
     if (pref.type === 'color') {
-      root.style.backgroundImage = 'none';
-      root.style.backgroundColor = pref.value;
       root.style.setProperty('--settings-bg', pref.value);
       root.style.removeProperty('background-size');
       root.style.removeProperty('background-repeat');
       root.style.removeProperty('background-position');
       root.style.removeProperty('background-attachment');
     } else {
-      root.style.backgroundImage = `url('${pref.value}')`;
-      root.style.backgroundColor = '#040814';
-      root.style.backgroundSize = 'cover';
-      root.style.backgroundRepeat = 'no-repeat';
-      root.style.backgroundPosition = 'center';
-      root.style.backgroundAttachment = 'fixed';
       root.style.removeProperty('--settings-bg');
     }
   }

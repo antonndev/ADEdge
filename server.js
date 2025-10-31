@@ -38,6 +38,7 @@ const {
 
 const APP_ROOT = path.resolve(__dirname);
 const ENV_PATH = path.join(APP_ROOT, '.env');
+const DASHBOARD_HTML = path.join(APP_ROOT, 'public', 'dashboard.html');
 
 const DEFAULTS = {
   PORT: 3000,
@@ -421,6 +422,46 @@ async function init() {
       return normalizeBackgroundPref(user && user.preferences && user.preferences.background || DEFAULT_BACKGROUND);
     }
 
+    function escapeCssUrl(url) {
+      return String(url).replace(/(["\\])/g, '\\$1');
+    }
+
+    function formatDashboardBackground(pref) {
+      if (!pref || !pref.value) return DEFAULT_BACKGROUND.value;
+      if (pref.type === 'color') {
+        return pref.value;
+      }
+      const escaped = escapeCssUrl(pref.value);
+      return `#040814 url("${escaped}") center/cover no-repeat fixed`;
+    }
+
+    function rewriteDashboardBackground(pref) {
+      if (!pref || !pref.value) return false;
+      const cssValue = formatDashboardBackground(pref);
+      try {
+        const original = fs.readFileSync(DASHBOARD_HTML, 'utf8');
+        let matched = false;
+        let updated = false;
+        const replaced = original.replace(/(body\s*\{[^}]*?background:\s*)([^;]+)(;)/, (full, prefix, current, suffix) => {
+          matched = true;
+          const trimmed = (current || '').trim();
+          if (trimmed !== cssValue) {
+            updated = true;
+          }
+          return `${prefix}${cssValue}${suffix}`;
+        });
+        if (!matched) return false;
+        if (!updated) return true;
+        const tempPath = `${DASHBOARD_HTML}.${process.pid}.${Date.now()}.tmp`;
+        fs.writeFileSync(tempPath, replaced, 'utf8');
+        fs.renameSync(tempPath, DASHBOARD_HTML);
+        return true;
+      } catch (err) {
+        console.error('Failed to rewrite dashboard background', err);
+        return false;
+      }
+    }
+
     function setBackgroundPreference(username, pref) {
       const sanitized = normalizeBackgroundPref(pref);
       const user = findUser(username);
@@ -687,6 +728,7 @@ async function init() {
       if (!preference) return jsonError(res, 400, 'preference required');
       const saved = setBackgroundPreference(username, preference);
       if (!saved) return jsonError(res, 500, 'Failed to save preference');
+      rewriteDashboardBackground(saved);
       return res.json({ success: true, backgroundPreference: saved });
     });
 
@@ -702,6 +744,7 @@ async function init() {
         const fileUrl = `/backgrounds/${req.file.filename}`;
         const saved = setBackgroundPreference(username, { type: 'image', value: fileUrl });
         if (!saved) return jsonError(res, 500, 'Failed to save preference');
+        rewriteDashboardBackground(saved);
         return res.json({ success: true, backgroundPreference: saved });
       });
     });
