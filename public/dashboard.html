@@ -46,6 +46,19 @@
       overflow-x: hidden;
       scrollbar-width: thin;
       scrollbar-color: rgba(96,152,255,0.6) rgba(9,13,24,0.9);
+      transition: background 0.4s ease, background-image 0.4s ease;
+    }
+
+    body[data-bg-type="color"] {
+      background-image: none !important;
+    }
+
+    body[data-bg-type="image"],
+    body[data-bg-type="template"] {
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-attachment: fixed;
     }
 
     body::before {
@@ -60,6 +73,11 @@
       animation: breathe 26s ease-in-out infinite;
     }
 
+    body[data-bg-type="image"]::before,
+    body[data-bg-type="template"]::before {
+      opacity: 0.18;
+    }
+
     body::after {
       content: '';
       position: fixed;
@@ -68,6 +86,11 @@
       opacity: 0.65;
       pointer-events: none;
       z-index: -1;
+    }
+
+    body[data-bg-type="image"]::after,
+    body[data-bg-type="template"]::after {
+      opacity: 0.35;
     }
 
     ::-webkit-scrollbar { width: 12px; }
@@ -482,7 +505,7 @@
       border: 1px dashed rgba(255,255,255,0.18);
       background: rgba(17,25,42,0.84);
       cursor: pointer;
-      transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+      transition: border-color 0.3s ease, transform 0.3s ease, background-color 0.3s ease;
       outline: none;
     }
 

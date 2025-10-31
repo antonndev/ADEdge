@@ -3,105 +3,654 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ShareX · Settings</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/public/style.css" />
+  <title>Edge · Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    .sxcu-row {
+    :root {
+      --settings-bg: #070b14;
+      --settings-surface: rgba(16, 23, 37, 0.86);
+      --settings-surface-strong: rgba(19, 26, 42, 0.9);
+      --settings-border: rgba(255, 255, 255, 0.08);
+      --settings-border-strong: rgba(255, 255, 255, 0.18);
+      --settings-text: rgba(244, 247, 255, 0.96);
+      --settings-muted: rgba(190, 200, 230, 0.72);
+      --accent: #4d7cff;
+      --accent-soft: rgba(77, 124, 255, 0.16);
+      --accent-strong: #77a8ff;
+      --danger: #ff4d61;
+      --radius-lg: 28px;
+      --radius-md: 20px;
+      --radius-sm: 12px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--settings-bg);
+      color: var(--settings-text);
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      line-height: 1.6;
       display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin: 18px 0 10px;
+      flex-direction: column;
+      transition: background 0.4s ease-in-out;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(126, 162, 255, 0.65) rgba(12, 16, 26, 0.85);
     }
 
-    .btn.outline {
-      border: 1px solid rgba(143,160,198,0.32);
-      background: rgba(10,14,24,0.25);
-      color: #f1f5ff;
-      padding: 10px 18px;
-      border-radius: 12px;
+    body[data-bg-type="image"],
+    body[data-bg-type="template"] {
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-attachment: fixed;
+    }
+
+    ::-webkit-scrollbar { width: 12px; }
+    ::-webkit-scrollbar-track { background: rgba(12, 16, 26, 0.85); border-radius: 10px; }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(124, 162, 255, 0.85), rgba(77, 124, 255, 0.75));
+      border-radius: 10px;
+      border: 2px solid rgba(7, 10, 18, 0.85);
+      transition: background 0.3s ease;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, rgba(255, 119, 150, 0.95), rgba(255, 175, 196, 0.85)); }
+
+    a { color: inherit; text-decoration: none; }
+
+    .settings-shell {
+      width: min(1200px, 92vw);
+      margin: 0 auto;
+      padding: 32px 0 64px;
+      flex: 1;
+      position: relative;
+    }
+
+    .settings-shell::before {
+      content: '';
+      position: absolute;
+      inset: -120px 8% auto;
+      height: 260px;
+      background: radial-gradient(circle at top, rgba(77,124,255,0.28), rgba(7,11,20,0));
+      filter: blur(4px);
+      z-index: -1;
+      opacity: 0.9;
+      pointer-events: none;
+    }
+
+    header.topbar {
+      position: sticky;
+      top: 22px;
+      z-index: 20;
+      border-radius: 36px;
+      background: rgba(10, 15, 26, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(18px);
+      padding: 18px 26px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      box-shadow: 0 18px 38px rgba(3, 8, 20, 0.35);
+      transition: transform 0.45s ease, background-color 0.45s ease, border-color 0.45s ease;
+    }
+
+    header.topbar::after {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      border-radius: 32px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      pointer-events: none;
+    }
+
+    header.topbar.is-compact {
+      transform: translateY(-8px);
+      background: rgba(8, 12, 22, 0.92);
+      border-color: rgba(255, 255, 255, 0.16);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand img {
+      width: 44px;
+      height: 44px;
+      border-radius: 14px;
+      object-fit: cover;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 12px 28px rgba(6, 10, 24, 0.35);
+    }
+
+    .brand .title {
+      font-size: 1.32rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: #fff;
+    }
+
+    .brand .subtitle {
+      font-size: 0.8rem;
+      color: var(--settings-muted);
+      margin-top: 2px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .btn {
+      font-family: inherit;
+      font-size: 0.92rem;
+      border-radius: 999px;
+      padding: 10px 20px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--settings-text);
       cursor: pointer;
-      transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+      transition: border-color 0.25s ease, color 0.25s ease, background-color 0.25s ease, transform 0.25s ease;
     }
 
-    .btn.outline:hover {
-      transform: translateY(-2px);
-      border-color: rgba(143,160,198,0.6);
-      background: rgba(143,160,198,0.12);
+    .btn.primary {
+      background: var(--accent);
+      color: #05070d;
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+    .btn.primary:hover { background: var(--accent-strong); }
+
+    .btn.ghost {
+      border-color: rgba(255, 255, 255, 0.18);
+      color: var(--settings-muted);
+    }
+    .btn.ghost:hover { color: #fff; border-color: rgba(255, 255, 255, 0.32); }
+
+    .btn.subtle {
+      border-color: rgba(255, 255, 255, 0.12);
+      color: var(--settings-muted);
+    }
+    .btn.subtle:hover {
+      color: var(--settings-text);
+      border-color: rgba(255, 255, 255, 0.28);
     }
 
-    .download-area {
-      min-height: 28px;
+    .btn.danger {
+      border-color: rgba(255, 77, 97, 0.5);
+      color: var(--danger);
+    }
+    .btn.danger:hover { border-color: rgba(255, 77, 97, 0.8); color: #fff; background: rgba(255, 77, 97, 0.08); }
+
+    button#logoutBtn:hover { border-color: rgba(255, 77, 97, 0.8); color: #fff; background: rgba(255, 77, 97, 0.12); }
+
+    main.settings-main {
+      margin-top: 40px;
+      display: grid;
+      gap: 28px;
+    }
+
+    .settings-card {
+      background: var(--settings-surface);
+      border: 1px solid var(--settings-border);
+      border-radius: var(--radius-lg);
+      padding: 28px 32px;
+      box-shadow: 0 24px 48px rgba(4, 9, 24, 0.28);
+      backdrop-filter: blur(14px);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .settings-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(77,124,255,0.12), rgba(77,124,255,0));
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      pointer-events: none;
+    }
+
+    .settings-card:hover::before { opacity: 1; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 24px;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 1.24rem;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .card-header p {
+      margin: 4px 0 0;
+      color: var(--settings-muted);
       font-size: 0.9rem;
-      color: rgba(201,210,235,0.88);
+    }
+
+    .card-header .meta {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .field label {
+      font-size: 0.88rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: rgba(198, 210, 240, 0.78);
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(10, 14, 24, 0.75);
+      padding: 12px 14px;
+      font-family: inherit;
+      font-size: 0.95rem;
+      color: var(--settings-text);
+      transition: border-color 0.25s ease, background-color 0.25s ease;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      outline: none;
+      border-color: rgba(120, 160, 255, 0.65);
+      background: rgba(12, 18, 30, 0.9);
+    }
+
+    .background-controls {
+      display: grid;
+      gap: 24px;
+    }
+
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    #backgroundColor { width: 56px; height: 40px; border-radius: 12px; border: 0; padding: 0; cursor: pointer; }
+
+    #backgroundColorHex {
+      width: 120px;
+      text-transform: uppercase;
+    }
+
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+    }
+
+    .template-option {
+      position: relative;
+      height: 120px;
+      border-radius: 18px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      cursor: pointer;
+      transform: translateY(0);
+      transition: transform 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
+      background-size: cover;
+      background-position: center;
+    }
+
+    .template-option::after {
+      content: 'Use template';
+      position: absolute;
+      inset: auto 16px 16px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: rgba(6, 9, 18, 0.68);
+      color: rgba(240, 244, 255, 0.86);
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    .template-option:hover {
+      transform: translateY(-6px);
+      border-color: rgba(130, 164, 255, 0.75);
+      box-shadow: 0 20px 34px rgba(9, 14, 28, 0.4);
+    }
+    .template-option.active {
+      border-color: rgba(130, 164, 255, 0.95);
+      box-shadow: 0 24px 40px rgba(9, 14, 28, 0.5);
+    }
+    .template-option.active::after {
+      background: rgba(130, 164, 255, 0.88);
+      color: #04060f;
+      content: 'Selected';
+    }
+
+    .status-line {
+      font-size: 0.85rem;
+      color: var(--settings-muted);
+      margin-top: 12px;
+      min-height: 20px;
+    }
+
+    .settings-actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .password-grid {
+      display: grid;
+      gap: 18px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .accounts-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .account-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(10, 14, 24, 0.65);
+      transition: border-color 0.3s ease, transform 0.3s ease;
+    }
+
+    .account-row:hover {
+      border-color: rgba(130, 164, 255, 0.65);
+      transform: translateY(-4px);
+    }
+
+    .account-row .identity {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .account-row .identity strong { font-size: 0.98rem; }
+    .account-row .identity span { color: var(--settings-muted); font-size: 0.85rem; }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, 0.7);
+      backdrop-filter: blur(12px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      width: min(420px, 90vw);
+      background: var(--settings-surface-strong);
+      border-radius: 24px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 26px 60px rgba(3, 7, 18, 0.55);
+      padding: 26px 30px;
+      transform: translateY(18px) scale(0.96);
+      transition: transform 0.3s ease;
+    }
+
+    .modal-backdrop.open .modal { transform: translateY(0) scale(1); }
+
+    .modal header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .modal header h3 {
+      margin: 0;
+      font-size: 1.18rem;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--settings-muted);
+      font-size: 1.4rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 50%;
+    }
+    .close-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+
+    @media (max-width: 720px) {
+      header.topbar { padding: 16px 18px; }
+      .settings-card { padding: 22px 20px; }
+      .card-header { flex-direction: column; align-items: flex-start; }
+      .brand .subtitle { display: none; }
     }
   </style>
 </head>
-<body class="app">
-  <header class="topbar">
-    <div class="container topbar-inner">
+<body data-bg-type="color">
+  <div class="settings-shell">
+    <header class="topbar" id="settingsTopbar">
       <a class="brand" href="/">
-        <svg class="logo" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M3 12a9 9 0 1 1 18 0 9 9 0 0 1-18 0z" fill="currentColor"/></svg>
-        <div class="brand-text">
-          <strong>ShareX</strong>
-          <small class="muted">Settings</small>
+        <img src="https://files.catbox.moe/bmjajo.webp" alt="Edge icon" />
+        <div>
+          <div class="title">Edge</div>
+          <div class="subtitle">Settings control center</div>
         </div>
       </a>
-
-      <nav class="top-actions" aria-label="Top actions">
-        <a class="link" href="/">Dashboard</a>
-        <button id="logoutBtn" class="btn ghost">Log out</button>
+      <nav class="top-actions">
+        <a class="btn ghost" href="/">Back to dashboard</a>
+        <button id="logoutBtn" class="btn ghost" type="button">Log out</button>
       </nav>
-    </div>
-  </header>
+    </header>
 
-  <main class="container settings-layout">
-    <section class="card settings-card">
-      <h2>Account Settings</h2>
+    <main class="settings-main">
+      <section class="settings-card" id="preferencesCard">
+        <div class="card-header">
+          <div class="meta">
+            <h2>Preferences</h2>
+            <p>Pick a dashboard background color, template, or drop in your own image.</p>
+          </div>
+          <button id="resetBackground" class="btn subtle" type="button">Reset to default</button>
+        </div>
 
-      <form id="settingsForm" novalidate>
+        <div class="background-controls">
+          <div>
+            <div class="field">
+              <label for="backgroundColor">Color picker</label>
+              <div class="color-row">
+                <input id="backgroundColor" type="color" value="#05080f" />
+                <input id="backgroundColorHex" type="text" value="#05080F" maxlength="7" />
+                <button id="applyColor" class="btn subtle" type="button">Apply color</button>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="field">
+              <label for="backgroundUpload">Upload background</label>
+              <input id="backgroundUpload" type="file" accept="image/*" />
+              <small class="status-line">PNG, JPG, or WEBP up to 5 MB.</small>
+            </div>
+            <div class="settings-actions">
+              <button id="uploadBackground" class="btn subtle" type="button">Upload &amp; apply</button>
+            </div>
+          </div>
+
+          <div>
+            <div class="field">
+              <label>Template gallery</label>
+              <div id="backgroundTemplates" class="template-grid" role="list"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="preferencesStatus" class="status-line" aria-live="polite"></div>
+      </section>
+
+      <section class="settings-card" id="accountBasics">
+        <div class="card-header">
+          <div class="meta">
+            <h2>Account basics</h2>
+            <p>Update your email or ShareX upload token.</p>
+          </div>
+        </div>
+
+        <form id="accountBasicsForm" novalidate>
+          <div class="field">
+            <label for="emailInput">Email</label>
+            <input id="emailInput" type="email" placeholder="you@example.com" autocomplete="email" />
+          </div>
+
+          <div class="field">
+            <label for="newUploadToken">New upload token</label>
+            <input id="newUploadToken" type="text" placeholder="Optional token" autocomplete="off" />
+            <small class="status-line">Paste the token here to replace the current ShareX authorization key.</small>
+          </div>
+
+          <div class="field">
+            <label for="currentPasswordBasics">Current password</label>
+            <input id="currentPasswordBasics" type="password" placeholder="Required when updating" autocomplete="current-password" />
+          </div>
+
+          <div class="settings-actions">
+            <button class="btn primary" type="submit">Save changes</button>
+          </div>
+          <div id="accountBasicsStatus" class="status-line" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <section class="settings-card" id="passwordCard">
+        <div class="card-header">
+          <div class="meta">
+            <h2>Change password</h2>
+            <p>Secure your Edge account with a fresh password.</p>
+          </div>
+        </div>
+
+        <form id="passwordForm" novalidate>
+          <div class="password-grid">
+            <div class="field">
+              <label for="currentPassword">Current password</label>
+              <input id="currentPassword" type="password" autocomplete="current-password" required />
+            </div>
+
+            <div class="field">
+              <label for="newPassword">New password</label>
+              <input id="newPassword" type="password" autocomplete="new-password" required />
+            </div>
+
+            <div class="field">
+              <label for="confirmPassword">Confirm new password</label>
+              <input id="confirmPassword" type="password" autocomplete="new-password" required />
+            </div>
+          </div>
+
+          <div class="settings-actions">
+            <button class="btn primary" type="submit">Update password</button>
+          </div>
+          <div id="passwordStatus" class="status-line" aria-live="polite"></div>
+        </form>
+      </section>
+
+      <section class="settings-card" id="accountsCard">
+        <div class="card-header">
+          <div class="meta">
+            <h2>Accounts</h2>
+            <p>Create, review, or remove accounts stored in <code>users.json</code>.</p>
+          </div>
+          <button id="openCreateAccount" class="btn primary" type="button">Create account</button>
+        </div>
+
+        <div id="accountsList" class="accounts-list" aria-live="polite"></div>
+        <div id="accountsStatus" class="status-line"></div>
+      </section>
+
+      <section class="settings-card" id="sharexCard">
+        <div class="card-header">
+          <div class="meta">
+            <h2>ShareX integration</h2>
+            <p>Generate ready-to-import ShareX profiles prefilled with your token.</p>
+          </div>
+        </div>
+
+        <div class="settings-actions">
+          <button id="genBinary" class="btn subtle" type="button">Generate .sxcu (Binary)</button>
+          <button id="genMultipart" class="btn subtle" type="button">Generate .sxcu (Multipart)</button>
+        </div>
+        <div id="downloadLink" class="status-line" aria-live="polite"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="createAccountModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="createAccountTitle">
+    <div class="modal">
+      <header>
+        <h3 id="createAccountTitle">Create account</h3>
+        <button class="close-btn" type="button" aria-label="Close" data-close-modal>&times;</button>
+      </header>
+
+      <form id="createAccountForm" novalidate>
         <div class="field">
-          <label for="emailInput">Email</label>
-          <input id="emailInput" type="email" placeholder="you@example.com" autocomplete="email" />
+          <label for="createUsername">Username</label>
+          <input id="createUsername" type="text" placeholder="team-member" autocomplete="off" required />
         </div>
 
         <div class="field">
-          <label for="currentPassword">Current password (required to change password)</label>
-          <input id="currentPassword" type="password" placeholder="Current password" autocomplete="current-password" />
+          <label for="createEmail">Email</label>
+          <input id="createEmail" type="email" placeholder="user@example.com" autocomplete="email" required />
         </div>
 
         <div class="field">
-          <label for="newPassword">New password</label>
-          <input id="newPassword" type="password" placeholder="New password" autocomplete="new-password" />
+          <label for="createPassword">Password</label>
+          <input id="createPassword" type="password" autocomplete="new-password" required />
         </div>
 
         <div class="field">
-          <label for="newUploadToken">Set a new Upload Token (optional)</label>
-          <input id="newUploadToken" placeholder="New upload token (optional)" />
-          <small class="muted">If provided, this token will be used by ShareX (Authorization: Bearer ...)</small>
+          <label for="createPasswordConfirm">Confirm password</label>
+          <input id="createPasswordConfirm" type="password" autocomplete="new-password" required />
         </div>
 
-        <div class="row">
-          <button id="saveSettings" class="btn primary">Save changes</button>
-          <a class="btn ghost" href="/">Back to Dashboard</a>
+        <div class="settings-actions">
+          <button class="btn primary" type="submit">Create</button>
+          <button class="btn subtle" type="button" data-close-modal>Cancel</button>
         </div>
-
-        <div id="settingsMsg" class="settings-msg" aria-live="polite"></div>
+        <div id="createAccountStatus" class="status-line" aria-live="polite"></div>
       </form>
-    </section>
-
-    <section class="card settings-card">
-      <h2>ShareX integration</h2>
-      <p class="muted">Generate a ready-to-import profile for ShareX. The .sxcu files include your token so you can capture and upload directly into ADEdge.</p>
-
-      <div class="sxcu-row">
-        <button id="genBinary" class="btn outline" type="button">Generate .sxcu (Binary)</button>
-        <button id="genMultipart" class="btn outline" type="button">Generate .sxcu (Multipart)</button>
-      </div>
-
-      <div id="downloadLink" class="download-area" aria-live="polite"></div>
-    </section>
-  </main>
+    </div>
+  </div>
 
   <script src="/public/app.js" defer></script>
 </body>
