@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Edge · Dashboard</title>
+
+  <!-- Inter font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:#0f1a2b;
+      --muted:#98a0b3;
+      --accent:#2dd4bf;
+      --text:#e6eef8;
+      --border:rgba(255,255,255,0.04);
+      --glass:rgba(255,255,255,0.02);
+      --radius:12px;
+      --shadow-sm: 0 6px 20px rgba(2,6,23,0.55);
+      --shadow-lg: 0 18px 50px rgba(2,6,23,0.7);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+    .container{max-width:1100px;margin:0 auto;padding:20px}
+
+    /* Topbar */
+    .topbar{position:sticky;top:0;padding:12px 0;background:rgba(11,18,32,0.6);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);z-index:40}
+    .topbar-inner{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
+    .brand-logo{width:44px;height:44px;border-radius:10px;object-fit:cover;border:1px solid var(--border);background:var(--panel);padding:6px}
+    .brand-text strong{display:block;font-size:16px}
+    .brand-text small{display:block;color:var(--muted);font-size:12px}
+    .top-actions{display:flex;align-items:center;gap:10px}
+    .link{color:var(--muted);text-decoration:none;font-size:14px}
+
+    /* Buttons */
+    .btn{font-weight:600;border-radius:10px;padding:8px 12px;border:0;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease}
+    .btn.primary{background:var(--accent);color:#012;box-shadow:0 8px 28px rgba(45,212,191,0.08)}
+    .btn.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+    .btn.flat{background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--muted)}
+
+    /* Layout */
+    .main-grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;margin-top:18px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));border-radius:var(--radius);padding:18px;border:1px solid var(--border);box-shadow:var(--shadow-sm)}
+    .upload-card{grid-column:span 5;display:flex;flex-direction:column;gap:12px;min-height:300px}
+    .gallery-card{grid-column:span 7;display:flex;flex-direction:column;gap:12px;min-height:300px}
+    .card-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .muted{color:var(--muted);font-size:13px}
+    .small-muted{font-size:12px;color:var(--muted)}
+
+    /* Dropzone & chooser */
+    .dropzone-wrap{display:flex;flex-direction:column;gap:10px}
+    .dropzone{display:flex;align-items:center;gap:12px;border-radius:10px;padding:14px;border:1px dashed var(--border);background:var(--glass);cursor:pointer;transition:all .12s}
+    .dropzone:hover{transform:translateY(-4px);box-shadow:var(--shadow-sm);border-color:var(--accent)}
+    .drop-inner{display:flex;gap:12px;align-items:center}
+    .drop-inner svg{width:40px;height:40px;opacity:0.95}
+
+    input[type="file"]{position:absolute;left:-9999px}
+
+    .file-chooser{display:flex;gap:10px;align-items:center}
+    .choose-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 14px;background:transparent;border:1px solid var(--border);border-radius:10px;color:var(--text);cursor:pointer;transition:all .12s}
+    .choose-btn:hover{transform:translateY(-3px);box-shadow:var(--shadow-sm);border-color:var(--accent)}
+    .file-name{font-size:13px;color:var(--muted);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+    .upload-controls{display:flex;gap:12px;align-items:center;margin-top:8px}
+    .preview{width:64px;height:64px;border-radius:10px;overflow:hidden;border:1px solid var(--border);background:rgba(255,255,255,0.01);display:flex;align-items:center;justify-content:center}
+    .preview img{width:100%;height:100%;object-fit:cover}
+
+    hr{border:0;border-top:1px solid rgba(255,255,255,0.02);margin:12px 0}
+    .sxcu-row{display:flex;gap:10px;align-items:center}
+
+    /* Gallery */
+    .images-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:12px}
+    .img-card{border-radius:10px;overflow:hidden;border:1px solid var(--border);background:rgba(255,255,255,0.01);display:flex;flex-direction:column;transition:transform .14s,box-shadow .14s;cursor:pointer}
+    .img-card:hover{transform:translateY(-8px);box-shadow:var(--shadow-lg);border-color:var(--accent)}
+    .img-thumb{width:100%;height:130px;object-fit:cover;background:#081120}
+    .img-meta{display:flex;align-items:center;justify-content:space-between;padding:10px;font-size:13px;color:var(--muted)}
+    .meta-left{display:flex;gap:8px;align-items:center}
+    .meta-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .meta-actions{display:flex;gap:8px;align-items:center}
+    .meta-actions button{background:transparent;border:1px solid transparent;color:var(--muted);padding:6px;border-radius:8px;cursor:pointer}
+    .meta-actions button:hover{background:rgba(255,255,255,0.02);color:var(--text)}
+
+    .empty{padding:28px;text-align:center;border-radius:10px;background:rgba(255,255,255,0.01);border:1px dashed rgba(255,255,255,0.02)}
+
+    /* Modal preview */
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(2,6,23,0.72);z-index:80}
+    .modal.show{display:flex}
+    .modal-inner{background:var(--panel);padding:16px;border-radius:12px;border:1px solid var(--border);max-width:920px;width:calc(100% - 40px);box-shadow:var(--shadow-lg)}
+    .modal-inner img{max-width:100%;max-height:70vh;border-radius:8px;display:block;margin-bottom:12px}
+    .modal-actions{display:flex;justify-content:flex-end;gap:8px}
+
+    @media (max-width:980px){
+      .main-grid{grid-template-columns:1fr;gap:14px}
+      .upload-card,.gallery-card{grid-column:auto}
+      .img-thumb{height:120px}
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar" role="banner">
+    <div class="container topbar-inner">
+      <a class="brand" href="/" aria-label="Edge Home">
+        <img src="/public/adsetups.png" alt="adsetups" class="brand-logo" onerror="this.style.display='none'">
+        <div class="brand-text">
+          <strong>Edge</strong>
+          <small class="muted">Uploader Dashboard</small>
+        </div>
+      </a>
+
+      <nav class="top-actions" aria-label="Top actions">
+        <a class="link" href="/settings.html" id="settingsLink">Settings</a>
+        <button id="logoutBtn" class="btn ghost">Log out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container main-grid" id="main">
+    <section class="card upload-card" aria-labelledby="uploadTitle">
+      <div class="card-header">
+        <div>
+          <h2 id="uploadTitle">Upload</h2>
+          <p class="muted">Drag & drop or choose an image to upload (token-protected)</p>
+        </div>
+        <div class="small-muted">Quick actions</div>
+      </div>
+
+      <div class="dropzone-wrap">
+        <label class="dropzone" id="dropzone" tabindex="0" aria-label="Drop image here or click to select">
+          <div class="drop-inner">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M5 10l7-7 7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            <div>
+              <strong>Drop image here</strong>
+              <div class="muted">or click the button below to choose a file</div>
+            </div>
+          </div>
+        </label>
+
+        <div class="file-chooser" role="group" aria-label="File chooser">
+          <input type="file" id="fileInput" name="file" accept="image/*" aria-hidden="true">
+          <button id="chooseBtn" type="button" class="choose-btn">Choose file</button>
+          <div class="file-name" id="fileName">No file chosen</div>
+        </div>
+      </div>
+
+      <form id="uploadForm" class="upload-form" novalidate>
+        <div class="upload-controls">
+          <button type="submit" class="btn primary">Upload</button>
+          <div class="preview" id="filePreview" aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10l4-4 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 6v8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div id="uploadStatus" class="muted" aria-live="polite" style="opacity:0.9"></div>
+        </div>
+      </form>
+
+      <hr />
+
+      <h3>Generate .sxcu</h3>
+      <div class="sxcu-row">
+        <button id="genBinary" class="btn flat">Generate .sxcu (Binary)</button>
+        <button id="genMultipart" class="btn flat">Generate .sxcu (Multipart)</button>
+        <div id="downloadLink" class="download-area" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <section class="card gallery-card" aria-labelledby="galleryTitle">
+      <div class="card-header">
+        <h2 id="galleryTitle">Gallery</h2>
+        <div class="muted">Recent uploads</div>
+      </div>
+
+      <div id="imagesGrid" class="images-grid" role="list" aria-live="polite"></div>
+
+      <div id="galleryEmpty" class="empty muted" hidden>
+        No images yet — upload your first image to get started.
+      </div>
+    </section>
+  </main>
+
+  <footer class="container footer">
+    <small class="muted">Edge uploader • Token-protected uploads • Manage token in Settings</small>
+  </footer>
+
+  <!-- Modal preview -->
+  <div id="previewModal" class="modal" role="dialog" aria-modal="true">
+    <div class="modal-inner">
+      <button id="modalClose" style="position:absolute;right:18px;top:12px;background:transparent;border:0;color:var(--text);font-size:18px;cursor:pointer">✕</button>
+      <img id="modalImg" src="" alt="Preview">
+      <div class="modal-actions" style="margin-top:8px">
+        <button id="copyUrl" class="btn flat">Copy URL</button>
+        <a id="openInNew" class="btn primary" href="#" target="_blank" rel="noopener">Open</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      // Elements (IDs preserved)
+      const dropzone = document.getElementById('dropzone');
+      const fileInput = document.getElementById('fileInput');
+      const chooseBtn = document.getElementById('chooseBtn');
+      const fileNameEl = document.getElementById('fileName');
+      const uploadForm = document.getElementById('uploadForm');
+      const filePreview = document.getElementById('filePreview');
+      const uploadStatus = document.getElementById('uploadStatus');
+      const genBinary = document.getElementById('genBinary');
+      const genMultipart = document.getElementById('genMultipart');
+      const downloadLink = document.getElementById('downloadLink');
+      const imagesGrid = document.getElementById('imagesGrid');
+      const galleryEmpty = document.getElementById('galleryEmpty');
+
+      const previewModal = document.getElementById('previewModal');
+      const modalImg = document.getElementById('modalImg');
+      const modalClose = document.getElementById('modalClose');
+      const copyUrlBtn = document.getElementById('copyUrl');
+      const openInNew = document.getElementById('openInNew');
+
+      // If backend returns filenames (without path), prefix this base.
+      // YOU SAID: backend uses uploads/imagine -> use that as base.
+      const FALLBACK_BASE = '/uploads/imagine/';
+
+      // token helpers (optional)
+      function getStoredToken(){ return localStorage.getItem('uploadToken') || null; }
+      function setStoredToken(t){ if(t) localStorage.setItem('uploadToken', t); else localStorage.removeItem('uploadToken'); }
+
+      // choose button
+      chooseBtn.addEventListener('click', () => fileInput.click());
+      dropzone.addEventListener('click', () => fileInput.click());
+
+      // drag & drop
+      ['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, e => {
+        e.preventDefault(); dropzone.style.borderColor = 'var(--accent)'; dropzone.style.transform = 'translateY(-4px)';
+      }));
+      ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => {
+        e.preventDefault(); dropzone.style.borderColor = ''; dropzone.style.transform = '';
+      }));
+      dropzone.addEventListener('drop', e => {
+        const f = e.dataTransfer.files && e.dataTransfer.files[0];
+        if(f){ fileInput.files = e.dataTransfer.files; fileInput.dispatchEvent(new Event('change')); }
+      });
+
+      // preview selected file
+      fileInput.addEventListener('change', () => {
+        const f = fileInput.files && fileInput.files[0];
+        if(!f){
+          fileNameEl.textContent = 'No file chosen';
+          filePreview.innerHTML = '';
+          return;
+        }
+        fileNameEl.textContent = f.name || 'file';
+        const url = URL.createObjectURL(f);
+        filePreview.innerHTML = '<img src="'+url+'" alt="preview">';
+      });
+
+      // upload
+      uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const f = fileInput.files && fileInput.files[0];
+        if(!f){ showStatus('Please select a file first'); return; }
+        const fd = new FormData(); fd.append('file', f);
+        const token = getStoredToken();
+        try{
+          showStatus('Uploading...');
+          const res = await fetch('/api/upload', {
+            method: 'POST',
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+            body: fd
+          });
+          if(!res.ok){
+            const t = await res.text().catch(()=>null);
+            throw new Error(t || 'Upload failed');
+          }
+          showStatus('Upload successful');
+          fileInput.value = '';
+          fileNameEl.textContent = 'No file chosen';
+          filePreview.innerHTML = '';
+          await loadGallery();
+        }catch(err){
+          console.error(err);
+          showStatus('Upload failed: ' + (err.message || err));
+        }
+      });
+
+      // generate .sxcu
+      async function generateSxcu(mode){
+        const token = getStoredToken();
+        try{
+          showStatus('Generating .sxcu...');
+          const res = await fetch('/api/generate-sxcu?type='+encodeURIComponent(mode), {
+            method: 'POST',
+            headers: token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode })
+          });
+          if(!res.ok){ const t = await res.text().catch(()=>null); throw new Error(t || 'Failed'); }
+          const blob = await res.blob();
+          const fileName = 'edge-' + mode + '.sxcu';
+          const url = URL.createObjectURL(blob);
+          downloadLink.innerHTML = '<a class="btn flat" href="'+url+'" download="'+fileName+'">Download '+fileName+'</a>';
+          showStatus('.sxcu ready');
+        }catch(err){
+          console.error(err);
+          showStatus('Failed to generate .sxcu: ' + (err.message || err));
+        }
+      }
+      genBinary && genBinary.addEventListener('click', () => generateSxcu('binary'));
+      genMultipart && genMultipart.addEventListener('click', () => generateSxcu('multipart'));
+
+      // === loadGallery: robust handling ===
+      async function loadGallery(){
+        try{
+          imagesGrid.innerHTML = '<div class="muted">Loading gallery…</div>';
+          const res = await fetch('/api/images');
+          if(!res.ok) throw new Error('Server returned ' + res.status);
+
+          // Try JSON first
+          let parsed;
+          try{
+            parsed = await res.json();
+          }catch(jsonErr){
+            // fallback: some servers may return newline-separated list or plain text
+            const text = await res.text();
+            console.warn('Fallback: /api/images returned non-JSON. Raw response:', text);
+            // split by newlines and remove empty lines
+            parsed = text.split(/[\r\n]+/).map(s => s.trim()).filter(Boolean);
+          }
+
+          console.log('DEBUG /api/images parsed:', parsed);
+
+          // Normalize to array of objects {url, name}
+          let items = Array.isArray(parsed) ? parsed.slice() : [];
+          // If object with property 'files' or similar, try to extract it
+          if(items.length === 0 && parsed && typeof parsed === 'object'){
+            // common patterns: {files: [...]} or {images: [...]}
+            if(Array.isArray(parsed.files)) items = parsed.files.slice();
+            else if(Array.isArray(parsed.images)) items = parsed.images.slice();
+            else {
+              // last resort: try to use values
+              items = Object.values(parsed).flat().filter(Boolean);
+            }
+          }
+
+          // if nothing, show empty
+          if(!Array.isArray(items) || items.length === 0){
+            imagesGrid.innerHTML = '';
+            galleryEmpty.hidden = false;
+            return;
+          }
+
+          // Map items to consistent objects
+          const normalized = items.map(it => {
+            if(typeof it === 'string'){
+              const s = it.trim();
+              // if already absolute URL or begins with slash -> use as-is
+              if(/^https?:\/\//i.test(s) || s.startsWith('/')) return { url: s, name: s.split('/').pop() };
+              // else treat as filename from uploads/imagine
+              return { url: FALLBACK_BASE + encodeURIComponent(s), name: s };
+            }
+            // if object, try to glean url or path
+            if(typeof it === 'object' && it !== null){
+              const url = it.url || it.path || it.href || it.src || '';
+              const name = it.name || (url && url.split('/').pop()) || '';
+              if(url){
+                // if url is relative filename without slash, prefix base
+                if(!/^https?:\/\//i.test(url) && !url.startsWith('/')){
+                  return { url: FALLBACK_BASE + encodeURIComponent(url), name };
+                }
+                return { url, name };
+              }
+              // if object looks like just filename properties
+              if(it.filename) return { url: FALLBACK_BASE + encodeURIComponent(it.filename), name: it.filename };
+            }
+            return null;
+          }).filter(Boolean);
+
+          // render
+          galleryEmpty.hidden = true;
+          imagesGrid.innerHTML = '';
+          normalized.forEach(i => {
+            const url = i.url;
+            const name = i.name || (url.split('/').pop());
+            const card = document.createElement('div'); card.className = 'img-card';
+            const img = document.createElement('img'); img.className = 'img-thumb'; img.src = url; img.alt = name; img.loading = 'lazy';
+            // fallback image if cannot load
+            img.onerror = function(){ this.src = '/public/image-fallback.png'; };
+            const meta = document.createElement('div'); meta.className = 'img-meta';
+            const left = document.createElement('div'); left.className = 'meta-left';
+            const nm = document.createElement('div'); nm.className = 'meta-name'; nm.textContent = name;
+            left.appendChild(nm);
+            const actions = document.createElement('div'); actions.className = 'meta-actions';
+            const copyBtn = document.createElement('button'); copyBtn.className = 'btn flat'; copyBtn.type = 'button'; copyBtn.textContent = 'Copy';
+            const openA = document.createElement('a'); openA.className = 'btn flat'; openA.href = url; openA.target = '_blank'; openA.rel = 'noopener noreferrer'; openA.textContent = 'Open';
+            actions.appendChild(copyBtn); actions.appendChild(openA);
+            meta.appendChild(left); meta.appendChild(actions);
+            card.appendChild(img); card.appendChild(meta);
+
+            // interactions
+            img.addEventListener('click', () => openPreview(url));
+            copyBtn.addEventListener('click', (ev) => { ev.stopPropagation(); copyToClipboard(url); });
+
+            imagesGrid.appendChild(card);
+          });
+
+        }catch(err){
+          console.error('loadGallery error:', err);
+          imagesGrid.innerHTML = '<div class="muted">Încărcare galerie eșuată — verifică endpointul <code>/api/images</code> (vezi console).</div>';
+        }
+      }
+
+      // initial load on page open
+      loadGallery();
+
+      // modal preview
+      function openPreview(url){
+        modalImg.src = url;
+        previewModal.classList.add('show');
+        previewModal.style.display = 'flex';
+        openInNew.href = url;
+        copyUrlBtn.onclick = () => copyToClipboard(url);
+      }
+      modalClose.addEventListener('click', closeModal);
+      previewModal.addEventListener('click', (ev) => { if(ev.target === previewModal) closeModal(); });
+      function closeModal(){ previewModal.style.display = 'none'; previewModal.classList.remove('show'); modalImg.src = ''; }
+
+      // copy helper
+      async function copyToClipboard(text){
+        try{
+          await navigator.clipboard.writeText(text);
+          showStatus('URL copiat în clipboard');
+        }catch(e){
+          const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+          try{ document.execCommand('copy'); showStatus('URL copiat'); }catch(err){ showStatus('Copy eșuat'); }
+          ta.remove();
+        }
+      }
+
+      function showStatus(msg){
+        if(!uploadStatus) return;
+        uploadStatus.textContent = msg;
+        clearTimeout(uploadStatus._t);
+        uploadStatus.style.opacity = '1';
+        uploadStatus._t = setTimeout(()=> uploadStatus.style.opacity = '0.75', 3000);
+      }
+
+      // small extras: generate .sxcu (kept from earlier)
+      async function generateSxcu(mode){
+        const token = getStoredToken();
+        try{
+          showStatus('Generating .sxcu...');
+          const res = await fetch('/api/generate-sxcu?type='+encodeURIComponent(mode), {
+            method: 'POST',
+            headers: token ? { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode })
+          });
+          if(!res.ok){ const t = await res.text().catch(()=>null); throw new Error(t || 'Failed'); }
+          const blob = await res.blob();
+          const fileName = 'edge-' + mode + '.sxcu';
+          const url = URL.createObjectURL(blob);
+          downloadLink.innerHTML = '<a class="btn flat" href="'+url+'" download="'+fileName+'">Download '+fileName+'</a>';
+          showStatus('.sxcu ready');
+        }catch(err){
+          console.error(err);
+          showStatus('Failed to generate .sxcu: ' + (err.message || err));
+        }
+      }
+      (document.getElementById('genBinary')||{}).addEventListener?.('click', () => generateSxcu('binary'));
+      (document.getElementById('genMultipart')||{}).addEventListener?.('click', () => generateSxcu('multipart'));
+
+      // quick hotkey: press U to open file picker
+      window.addEventListener('keydown', (e) => {
+        if(e.key.toLowerCase() === 'u' && !/input|textarea/i.test(document.activeElement.tagName)) fileInput.click();
+      });
+
+      // refresh gallery when tab visible
+      document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'visible') loadGallery(); });
+
+      // helper: token accessors used by some other UI flows (kept)
+      function getStoredToken(){ return localStorage.getItem('uploadToken') || null; }
+      function setStoredToken(t){ if(t) localStorage.setItem('uploadToken', t); else localStorage.removeItem('uploadToken'); }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ShareX · Settings</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/public/style.css" />
+</head>
+<body class="app">
+  <header class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="/">
+        <svg class="logo" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M3 12a9 9 0 1 1 18 0 9 9 0 0 1-18 0z" fill="currentColor"/></svg>
+        <div class="brand-text">
+          <strong>ShareX</strong>
+          <small class="muted">Settings</small>
+        </div>
+      </a>
+
+      <nav class="top-actions" aria-label="Top actions">
+        <a class="link" href="/">Dashboard</a>
+        <button id="logoutBtn" class="btn ghost">Log out</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container settings-layout">
+    <section class="card settings-card">
+      <h2>Account Settings</h2>
+
+      <form id="settingsForm" novalidate>
+        <div class="field">
+          <label for="emailInput">Email</label>
+          <input id="emailInput" type="email" placeholder="you@example.com" autocomplete="email" />
+        </div>
+
+        <div class="field">
+          <label for="currentPassword">Current password (required to change password)</label>
+          <input id="currentPassword" type="password" placeholder="Current password" autocomplete="current-password" />
+        </div>
+
+        <div class="field">
+          <label for="newPassword">New password</label>
+          <input id="newPassword" type="password" placeholder="New password" autocomplete="new-password" />
+        </div>
+
+        <div class="field">
+          <label for="newUploadToken">Set a new Upload Token (optional)</label>
+          <input id="newUploadToken" placeholder="New upload token (optional)" />
+          <small class="muted">If provided, this token will be used by ShareX (Authorization: Bearer ...)</small>
+        </div>
+
+        <div class="row">
+          <button id="saveSettings" class="btn primary">Save changes</button>
+          <a class="btn ghost" href="/">Back to Dashboard</a>
+        </div>
+
+        <div id="settingsMsg" class="settings-msg" aria-live="polite"></div>
+      </form>
+    </section>
+  </main>
+
+  <script src="/public/app.js" defer></script>
+</body>
+</html>

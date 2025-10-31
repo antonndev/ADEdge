@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Autentificare</title>
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial;
+      padding: 0;
+      margin: 0;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: #f4f6f8;
+    }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 6px 18px rgba(17,24,39,0.08);
+      padding: 24px;
+      width: 360px;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0 0 12px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    input[type=text],
+    input[type=password] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-top: 6px;
+    }
+    button {
+      margin-top: 18px;
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 0;
+      font-weight: 600;
+      background: #0ea5a4;
+      color: #fff;
+      cursor: pointer;
+    }
+    button[disabled] {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 12px;
+      min-height: 20px;
+      font-size: 13px;
+    }
+    .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #6b7280;
+    }
+    .error {
+      color: #b91c1c;
+    }
+    .success {
+      color: #047857;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="card" role="main">
+    <h1>Autentificare</h1>
+
+    <form id="loginForm" novalidate>
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" required aria-required="true" />
+
+      <label for="password">Parolă</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required aria-required="true" />
+
+      <button id="loginBtn" type="submit">Login</button>
+      <div id="loginStatus" class="status"></div>
+    </form>
+  </main>
+
+  <script>
+  (function(){
+    'use strict';
+
+    function el(id){ return document.getElementById(id); }
+
+    function setStatus(msg, cls){
+      const s = el('loginStatus');
+      if(!s) return;
+      s.textContent = msg || '';
+      s.className = 'status';
+      if(cls === 'error') s.classList.add('error');
+      if(cls === 'success') s.classList.add('success');
+    }
+
+    async function attemptLogin(username, password, timeoutMs = 10000){
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ username, password }),
+          signal: controller.signal
+        });
+
+        const text = await res.text();
+        let body = null;
+        try { body = text ? JSON.parse(text) : null; }
+        catch(e) { body = text; }
+
+        return { ok: res.ok, status: res.status, body };
+      } catch(err) {
+        if(err.name === 'AbortError') return { ok:false, status:0, error:'Request timeout' };
+        return { ok:false, status:0, error: err.message || String(err) };
+      } finally { clearTimeout(id); }
+    }
+
+    document.addEventListener('DOMContentLoaded', function(){
+      const form = el('loginForm');
+      const usernameEl = el('username');
+      const passwordEl = el('password');
+      const loginBtn = el('loginBtn');
+
+      if(!form || !usernameEl || !passwordEl || !loginBtn){
+        console.error('Missing login elements');
+        setStatus('Eroare internă: Elemente lipsă.', 'error');
+        return;
+      }
+
+      form.addEventListener('submit', async function(e){
+        e.preventDefault();
+        setStatus('', null);
+
+        const username = (usernameEl.value || '').trim();
+        const password = passwordEl.value || '';
+        if(!username || !password){
+          setStatus('Completează username și parola.', 'error');
+          return;
+        }
+
+        loginBtn.disabled = true;
+        const origText = loginBtn.textContent;
+        loginBtn.textContent = 'Autentificare în curs...';
+
+        const res = await attemptLogin(username, password);
+        console.log('login result', res);
+
+        if(!res.ok){
+          let msg = '';
+          if(res.error) msg = res.error;
+          else if(res.body){
+            if(typeof res.body === 'object')
+              msg = res.body.error || res.body.message || JSON.stringify(res.body);
+            else msg = String(res.body);
+          } else msg = 'Status ' + res.status;
+
+          if(res.status === 401 || res.status === 403)
+            msg = 'Nume de utilizator sau parolă incorectă.';
+
+          setStatus('Autentificare eșuată: ' + msg, 'error');
+          loginBtn.disabled = false;
+          loginBtn.textContent = origText;
+          return;
+        }
+
+        // succes autenticare
+        setStatus('Autentificare reușită — redirecționare...', 'success');
+
+        let redirectTo = '/dashboard'; // implicit dashboard
+        try {
+          const body = res.body && typeof res.body === 'object'
+            ? res.body
+            : JSON.parse(res.body || '{}');
+
+          if (body.redirect) redirectTo = body.redirect;
+          else if (body.location) redirectTo = body.location;
+        } catch (e) {
+          console.warn('Eroare parsare răspuns login:', e);
+        }
+
+        setTimeout(() => {
+          window.location.href = redirectTo;
+        }, 250);
+      });
+
+      // verificare conexiune server
+      fetch('/healthz', { credentials: 'same-origin' })
+        .then(r => console.log('/healthz', r.status))
+        .catch(e => {
+          console.warn('/healthz failed', e);
+          setStatus('Serverul este inaccesibil.', 'error');
+        });
+    });
+  })();
+  </script>
+</body>
+</html>
