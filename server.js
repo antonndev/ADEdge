@@ -33,11 +33,13 @@ const { v4: uuidv4 } = require('uuid');
 const {
   DATA_DIR, USERS_FILE, IMAGES_FILE,
   listImages, addImage, removeImage,
-  listUsers, findUser, createUser, updateUser
+  listUsers, findUser, createUser, updateUser, deleteUser
 } = require('./lib/db');
 
 const APP_ROOT = path.resolve(__dirname);
 const ENV_PATH = path.join(APP_ROOT, '.env');
+const PUBLIC_DIR = path.join(APP_ROOT, 'public');
+const DASHBOARD_HTML_PATH = path.join(PUBLIC_DIR, 'dashboard.html');
 
 const DEFAULTS = {
   PORT: 3000,
@@ -46,6 +48,14 @@ const DEFAULTS = {
   RATE_LIMIT_TOKENS: 20,
   RATE_LIMIT_REFILL: 1
 };
+
+const DEFAULT_BACKGROUND = { type: 'color', value: '#05080f' };
+const TEMPLATE_BACKGROUNDS = [
+  'https://images.unsplash.com/photo-1526481280695-3c469be254d2?auto=format&fit=crop&w=1600&q=80',
+  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&q=80',
+  'https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=1600&q=80',
+  'https://images.unsplash.com/photo-1451188214936-ec16af5ca155?auto=format&fit=crop&w=1600&q=80'
+];
 
 // In-memory plaintext upload token if generated on this run (shown once in console)
 let initialUploadTokenPlain = null;
@@ -210,7 +220,8 @@ async function ensureDataAndAdminSync() {
     username: username,
     password_hash: hash,
     email: 'admin@example.com',
-    created_at: Date.now()
+    created_at: Date.now(),
+    preferences: { background: Object.assign({}, DEFAULT_BACKGROUND) }
   };
 
   // Write users JSON (simple structure)
@@ -262,6 +273,7 @@ async function init() {
     // read config from env
     const PORT = parseInt(process.env.PORT || DEFAULTS.PORT, 10);
     const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || DEFAULTS.UPLOAD_DIR);
+    const BACKGROUND_DIR = path.join(UPLOAD_DIR, 'backgrounds');
     const MAX_UPLOAD_BYTES = parseInt(process.env.MAX_UPLOAD_BYTES || DEFAULTS.MAX_UPLOAD_BYTES, 10);
     const RATE_LIMIT_TOKENS = parseInt(process.env.RATE_LIMIT_TOKENS || DEFAULTS.RATE_LIMIT_TOKENS, 10);
     const RATE_LIMIT_REFILL = parseFloat(process.env.RATE_LIMIT_REFILL || DEFAULTS.RATE_LIMIT_REFILL, 10);
@@ -275,6 +287,7 @@ async function init() {
 
     // create uploads dir
     if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    if (!fs.existsSync(BACKGROUND_DIR)) fs.mkdirSync(BACKGROUND_DIR, { recursive: true });
 
     // Multer
     const storage = multer.diskStorage({
@@ -291,11 +304,20 @@ async function init() {
       cb(null, true);
     };
     const upload = multer({ storage, fileFilter, limits: { fileSize: MAX_UPLOAD_BYTES } });
+    const backgroundStorage = multer.diskStorage({
+      destination: (req, file, cb) => cb(null, BACKGROUND_DIR),
+      filename: (req, file, cb) => {
+        const safe = (file.originalname || 'background').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        cb(null, `${Date.now()}-${uuidv4()}-${safe}`);
+      }
+    });
+    const backgroundUpload = multer({ storage: backgroundStorage, fileFilter, limits: { fileSize: 5 * 1024 * 1024 } });
 
     const app = express();
     app.use(express.json({ limit: '1mb' }));
     app.use(cookieParser());
-    app.use('/public', express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
+    app.use('/public', express.static(PUBLIC_DIR, { maxAge: '1d' }));
+    app.use('/backgrounds', express.static(BACKGROUND_DIR, { maxAge: '7d' }));
 
     // rate limiter in-memory
     const rateBuckets = new Map();
@@ -372,15 +394,107 @@ async function init() {
       return res.status(status).json({ success: false, error: msg });
     }
 
+    function normalizeBackgroundPref(pref) {
+      if (!pref || typeof pref !== 'object') return Object.assign({}, DEFAULT_BACKGROUND);
+      const type = pref.type;
+      const value = typeof pref.value === 'string' ? pref.value.trim() : '';
+      if (type === 'color') {
+        if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value)) {
+          return { type: 'color', value: value.toLowerCase() };
+        }
+        return Object.assign({}, DEFAULT_BACKGROUND);
+      }
+      if (type === 'template') {
+        if (TEMPLATE_BACKGROUNDS.includes(value)) {
+          return { type: 'template', value };
+        }
+        return Object.assign({}, DEFAULT_BACKGROUND);
+      }
+      if (type === 'image') {
+        if (value.startsWith('/backgrounds/')) {
+          return { type: 'image', value };
+        }
+        return Object.assign({}, DEFAULT_BACKGROUND);
+      }
+      return Object.assign({}, DEFAULT_BACKGROUND);
+    }
+
+    function getBackgroundPreference(user) {
+      return normalizeBackgroundPref(user && user.preferences && user.preferences.background || DEFAULT_BACKGROUND);
+    }
+
+    function setBackgroundPreference(username, pref) {
+      const sanitized = normalizeBackgroundPref(pref);
+      const user = findUser(username);
+      if (!user) return false;
+      const prefs = Object.assign({}, user.preferences || {});
+      prefs.background = sanitized;
+      const ok = updateUser(username, { preferences: prefs });
+      return ok ? sanitized : false;
+    }
+
+    function escapeCssUrl(value) {
+      return String(value || '').replace(/'/g, "\\'");
+    }
+
+    async function rewriteDashboardBackground(pref) {
+      if (!pref) return;
+      try {
+        const html = await fsp.readFile(DASHBOARD_HTML_PATH, 'utf8');
+        let next = html;
+        const varPattern = /(--bg:\s*)([^;]+)(;)/;
+        const bodyPattern = /(body\s*\{[^}]*?background:\s*)([^;]+)(;)/;
+        const colorValue = pref.type === 'color' ? pref.value : DEFAULT_BACKGROUND.value;
+        const backgroundValue = pref.type === 'color'
+          ? pref.value
+          : `url('${escapeCssUrl(pref.value)}') center/cover no-repeat fixed`;
+
+        if (varPattern.test(next)) {
+          next = next.replace(varPattern, `$1${colorValue}$3`);
+        }
+
+        if (bodyPattern.test(next)) {
+          next = next.replace(bodyPattern, `$1${backgroundValue}$3`);
+        }
+
+        if (next !== html) {
+          await fsp.writeFile(DASHBOARD_HTML_PATH, next, 'utf8');
+        }
+      } catch (err) {
+        console.error('Failed to rewrite dashboard background', err);
+      }
+    }
+
+    function userForClient(user) {
+      if (!user) return null;
+      return {
+        username: user.username,
+        email: user.email || '',
+        created_at: user.created_at,
+        backgroundPreference: getBackgroundPreference(user)
+      };
+    }
+
     // Routes
 
     app.get('/', (req, res) => {
       try {
         const username = checkAuthFromReq(req);
-        if (username) return res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-        return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+        if (username) return res.sendFile(path.join(PUBLIC_DIR, 'dashboard.html'));
+        return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
       } catch (err) {
         console.error('Error serving /', err);
+        return jsonError(res, 500, 'Internal server error');
+      }
+    });
+
+    app.get('/settings', (req, res) => {
+      try {
+        const username = checkAuthFromReq(req);
+        if (!username) return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
+        return res.sendFile(path.join(PUBLIC_DIR, 'settings.html'));
+      } catch (err) {
+        console.error('Error serving /settings', err);
         return jsonError(res, 500, 'Internal server error');
       }
     });
@@ -550,16 +664,18 @@ async function init() {
     });
 
     // Me
-    app.get('/api/me', (req, res) => {
+    function handleAccountMe(req, res) {
       const username = checkAuthFromReq(req);
       if (!username) return jsonError(res, 401, 'Unauthorized');
       const user = findUser(username);
       if (!user) return jsonError(res, 404, 'User not found');
-      return res.json({ success: true, username: user.username, email: user.email, created_at: user.created_at });
-    });
+      return res.json({ success: true, user: userForClient(user) });
+    }
 
-    // Settings: change email/password and optionally set new upload token
-    app.post('/api/settings', async (req, res) => {
+    app.get('/api/me', handleAccountMe);
+    app.get('/api/account/me', handleAccountMe);
+
+    async function handleAccountSettings(req, res) {
       const username = checkAuthFromReq(req);
       if (!username) return jsonError(res, 401, 'Unauthorized');
       const { email, currentPassword, newPassword, newUploadToken } = req.body || {};
@@ -587,6 +703,89 @@ async function init() {
       }
 
       return res.json({ success: true, message: 'Settings updated' });
+    }
+
+    app.post('/api/settings', handleAccountSettings);
+    app.post('/api/account/settings', handleAccountSettings);
+
+    app.get('/api/account/background/templates', (req, res) => {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+      return res.json({ success: true, templates: TEMPLATE_BACKGROUNDS, defaultBackground: DEFAULT_BACKGROUND });
+    });
+
+    app.post('/api/account/background', async (req, res) => {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+      const preference = req.body && req.body.preference;
+      if (!preference) return jsonError(res, 400, 'preference required');
+      const saved = setBackgroundPreference(username, preference);
+      if (!saved) return jsonError(res, 500, 'Failed to save preference');
+      await rewriteDashboardBackground(saved);
+      return res.json({ success: true, backgroundPreference: saved });
+    });
+
+    app.post('/api/account/background/upload', (req, res) => {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+      backgroundUpload.single('background')(req, res, async err => {
+        if (err) {
+          console.error('Background upload error', err);
+          return jsonError(res, 400, err.message || 'Upload failed');
+        }
+        if (!req.file) return jsonError(res, 400, 'No file uploaded');
+        const fileUrl = `/backgrounds/${req.file.filename}`;
+        const saved = setBackgroundPreference(username, { type: 'image', value: fileUrl });
+        if (!saved) return jsonError(res, 500, 'Failed to save preference');
+        await rewriteDashboardBackground(saved);
+        return res.json({ success: true, backgroundPreference: saved });
+      });
+    });
+
+    app.get('/api/account/users', (req, res) => {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+      if (username !== 'admin') return jsonError(res, 403, 'Admin access required');
+      const users = listUsers().map(userForClient);
+      return res.json({ success: true, users });
+    });
+
+    app.post('/api/account/users', async (req, res) => {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+      if (username !== 'admin') return jsonError(res, 403, 'Admin access required');
+      const { newUsername, email, password } = req.body || {};
+      if (!newUsername || !email || !password) return jsonError(res, 400, 'newUsername, email and password required');
+      const trimmedUsername = newUsername.trim();
+      const trimmedEmail = email.trim();
+      if (!/^[a-zA-Z0-9._-]{3,32}$/.test(trimmedUsername)) return jsonError(res, 400, 'Username must be 3-32 characters');
+      if (!/^.+@.+\..+$/.test(trimmedEmail)) return jsonError(res, 400, 'Email invalid');
+      if (password.length < 6) return jsonError(res, 400, 'Password must be at least 6 characters');
+      const existingUser = findUser(trimmedUsername);
+      if (existingUser) return jsonError(res, 409, 'Username already exists');
+      const emailTaken = listUsers().some(u => (u.email || '').toLowerCase() === trimmedEmail.toLowerCase());
+      if (emailTaken) return jsonError(res, 409, 'Email already exists');
+      const hashed = await bcrypt.hash(password, 10);
+      createUser({
+        username: trimmedUsername,
+        email: trimmedEmail,
+        password_hash: hashed,
+        created_at: Date.now(),
+        preferences: { background: Object.assign({}, DEFAULT_BACKGROUND) }
+      });
+      return res.json({ success: true, user: userForClient(findUser(trimmedUsername)) });
+    });
+
+    app.delete('/api/account/users/:username', (req, res) => {
+      const actor = checkAuthFromReq(req);
+      if (!actor) return jsonError(res, 401, 'Unauthorized');
+      if (actor !== 'admin') return jsonError(res, 403, 'Admin access required');
+      const target = req.params.username;
+      if (!target) return jsonError(res, 400, 'username required');
+      if (target === 'admin') return jsonError(res, 400, 'Cannot delete admin account');
+      const ok = deleteUser(target);
+      if (!ok) return jsonError(res, 404, 'User not found');
+      return res.json({ success: true });
     });
 
     // Images list (dashboard)
@@ -633,11 +832,12 @@ async function init() {
 
     // Generate .sxcu (embed token if generated this run or set in settings)
     // Modified to use /view at final URL so ShareX will produce Discord-friendly links
-    app.get('/api/generate-sxcu', (req, res) => {
+    function handleGenerateSxcu(req, res) {
       const username = checkAuthFromReq(req);
       if (username === null) return jsonError(res, 401, 'Unauthorized');
 
-      const mode = (req.query.mode || 'binary').toLowerCase();
+      const modeInput = req.query.mode || req.query.type || (req.body && req.body.mode) || 'binary';
+      const mode = String(modeInput).toLowerCase();
       const origin = getOrigin(req);
 
       // Folosim token-ul din memoria curentă sau din .env
@@ -687,7 +887,10 @@ async function init() {
       res.setHeader('Content-disposition', `attachment; filename=ShareX-${mode}.sxcu`);
       res.setHeader('Content-Type', 'application/json');
       return res.send(JSON.stringify(obj, null, 2));
-    });
+    }
+
+    app.get('/api/generate-sxcu', handleGenerateSxcu);
+    app.post('/api/generate-sxcu', handleGenerateSxcu);
 
     // Fallback: serve login/dashboard pages
     app.use((req, res, next) => {
@@ -695,8 +898,8 @@ async function init() {
         return jsonError(res, 404, 'Not found');
       }
       const username = checkAuthFromReq(req);
-      if (username) return res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-      return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+      if (username) return res.sendFile(path.join(PUBLIC_DIR, 'dashboard.html'));
+      return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
     });
 
     // Global error handler
