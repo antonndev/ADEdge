@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Settings bindings
   const settingsMenuToggle = document.getElementById('settingsMenuToggle');
-  const settingsMenuClose = document.getElementById('settingsMenuClose');
   const settingsNav = document.getElementById('settingsNav');
   const settingsNavBackdrop = document.getElementById('settingsNavBackdrop');
   const settingsPanels = document.querySelectorAll('[data-settings-panel]');
@@ -49,41 +48,48 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (settingsNav && navButtons.length) {
     const media = window.matchMedia('(min-width: 1024px)');
-    const openNav = () => {
-      settingsNav.classList.add('is-open');
-      settingsNavBackdrop?.classList.add('visible');
-      settingsNavBackdrop?.removeAttribute('hidden');
+    const settingsStage = document.querySelector('.settings-stage');
+    let navOpen = media.matches;
+
+    const applyStageState = open => {
+      if (!settingsStage) return;
+      settingsStage.classList.toggle('drawer-hidden', !open);
     };
 
-    const closeNav = (force = false) => {
-      if (media.matches && !force) return;
-      if (!settingsNav.classList.contains('is-open') && !media.matches) return;
-      settingsNav.classList.remove('is-open');
-      settingsNavBackdrop?.classList.remove('visible');
-      settingsNavBackdrop?.setAttribute('hidden', 'hidden');
-    };
-
-    const syncDesktopState = () => {
-      if (media.matches) {
-        settingsNav.classList.add('is-open');
-        settingsNavBackdrop?.classList.remove('visible');
-        settingsNavBackdrop?.setAttribute('hidden', 'hidden');
+    const updateBackdrop = open => {
+      if (!settingsNavBackdrop) return;
+      if (open && !media.matches) {
+        settingsNavBackdrop.classList.add('visible');
+        settingsNavBackdrop.removeAttribute('hidden');
+      } else {
+        settingsNavBackdrop.classList.remove('visible');
+        settingsNavBackdrop.setAttribute('hidden', 'hidden');
       }
     };
-    syncDesktopState();
-    media.addEventListener('change', syncDesktopState);
+
+    const setNavState = open => {
+      navOpen = open;
+      settingsNav.classList.toggle('is-open', open);
+      applyStageState(open);
+      updateBackdrop(open);
+      settingsMenuToggle?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+
+    const closeNav = () => setNavState(false);
+
+    setNavState(navOpen);
+    media.addEventListener('change', () => setNavState(navOpen));
 
     settingsMenuToggle?.addEventListener('click', () => {
-      if (settingsNav.classList.contains('is-open') && media.matches) return;
-      if (settingsNav.classList.contains('is-open')) closeNav();
-      else openNav();
+      setNavState(!navOpen);
     });
-    settingsMenuClose?.addEventListener('click', () => closeNav(true));
-    settingsNavBackdrop?.addEventListener('click', () => closeNav(true));
+    settingsNavBackdrop?.addEventListener('click', () => {
+      if (navOpen) closeNav();
+    });
 
     document.addEventListener('keydown', evt => {
       if (evt.key === 'Escape') {
-        closeNav(true);
+        if (navOpen) closeNav();
         if (createAccountModal?.classList.contains('open')) closeModal(createAccountModal);
       }
     });
@@ -93,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = btn.dataset.panelTarget;
         if (!target) return;
         switchSettingsPanel(target);
-        if (!window.matchMedia('(min-width: 1024px)').matches) {
+        if (!media.matches) {
           closeNav();
         }
       });
