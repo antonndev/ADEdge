@@ -242,23 +242,6 @@
       color: var(--text-muted);
     }
 
-    .drawer-close {
-      width: 38px;
-      height: 38px;
-      border-radius: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      background: rgba(12, 17, 30, 0.8);
-      color: #fff;
-      cursor: pointer;
-      display: grid;
-      place-items: center;
-      font-size: 1.3rem;
-      line-height: 1;
-      transition: border-color 0.3s ease, background 0.3s ease;
-    }
-
-    .drawer-close:hover { border-color: rgba(255, 255, 255, 0.3); background: rgba(18, 24, 40, 0.9); }
-
     .drawer-nav {
       display: flex;
       flex-direction: column;
@@ -604,7 +587,10 @@
     @media (min-width: 1024px) {
       .settings-stage {
         padding-left: 320px;
+        transition: padding 0.4s ease;
       }
+
+      .settings-stage.drawer-hidden { padding-left: 0; }
 
       .settings-drawer {
         position: fixed;
@@ -616,8 +602,11 @@
         overflow: hidden;
       }
 
+      .settings-stage.drawer-hidden .settings-drawer { transform: translateX(-110%); }
+
       .drawer-backdrop { display: none; }
       .menu-toggle { left: 44px; }
+      .settings-stage.drawer-hidden .menu-toggle { left: 26px; }
     }
 
     @media (max-width: 720px) {
@@ -645,7 +634,6 @@
             <span>Control</span>
           </div>
         </div>
-        <button id="settingsMenuClose" class="drawer-close" type="button" aria-label="Close menu">×</button>
       </div>
 
       <nav class="drawer-nav" role="tablist">
