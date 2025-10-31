@@ -97,11 +97,19 @@
       width: min(1180px, 92vw);
       margin: 0 auto 38px;
       border-radius: 32px;
-      background: rgba(15,22,36,0.9);
-      border: 1px solid var(--outline);
-      box-shadow: var(--shadow-lg);
-      backdrop-filter: blur(22px);
-      padding: 16px 22px;
+      background: rgba(14,20,34,0.88);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: none;
+      backdrop-filter: blur(18px);
+      padding: 18px 24px;
+      transition: transform 0.45s ease, background-color 0.45s ease, border-color 0.45s ease, box-shadow 0.45s ease;
+    }
+
+    .topbar.is-scrolled {
+      transform: translateY(-12px) scale(0.995);
+      background: rgba(8,12,22,0.96);
+      border-color: rgba(255,255,255,0.16);
+      box-shadow: 0 18px 40px rgba(5,9,20,0.25);
     }
 
     .topbar::after {
@@ -109,7 +117,7 @@
       position: absolute;
       inset: 2px;
       border-radius: 30px;
-      border: 1px solid rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.05);
       pointer-events: none;
     }
 
@@ -123,42 +131,42 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 18px;
+      gap: 14px;
+    }
+
+    .brand-mark {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 12px 28px rgba(8,12,24,0.3);
+      background: rgba(8,12,24,0.92);
+    }
+
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
 
     .brand-name {
-      display: flex;
-      align-items: center;
-      gap: 12px;
       font-weight: 600;
-      font-size: 1.32rem;
-      letter-spacing: 0.04em;
-    }
-
-    .brand-name span {
-      display: inline-flex;
-      align-items: center;
-    }
-
-    .brand-name .prefix { color: var(--text); }
-    .brand-name .suffix { color: var(--accent); }
-
-    .brand-mark {
-      width: 46px;
-      height: 46px;
-      border-radius: 18px;
-      object-fit: cover;
-      border: 1px solid var(--outline);
-      box-shadow: 0 16px 40px rgba(6,10,22,0.48);
-      background: rgba(8,12,24,0.9);
+      font-size: 1.28rem;
+      letter-spacing: -0.005em;
+      color: #fff;
+      margin: 0;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
 
     .brand-subtitle {
       display: block;
-      font-size: 0.8rem;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
+      font-size: 0.78rem;
+      letter-spacing: 0.02em;
+      text-transform: none;
       color: var(--muted);
+      font-weight: 500;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
 
     .top-actions {
@@ -172,9 +180,9 @@
       padding: 10px 16px;
       border-radius: 999px;
       color: var(--muted);
-      transition: background-color 0.25s ease, color 0.25s ease;
+      transition: color 0.25s ease;
     }
-    .link:hover { background: rgba(84,116,196,0.18); color: var(--text); }
+    .link:hover { color: var(--text); }
 
     .visually-hidden {
       position: absolute !important;
@@ -192,43 +200,53 @@
       font-weight: 600;
       border-radius: 18px;
       padding: 11px 20px;
-      border: 1px solid transparent;
+      border: 1px solid rgba(255,255,255,0.12);
       cursor: pointer;
       font-size: 0.95rem;
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      transition: transform 0.25s ease, box-shadow 0.25s ease, background-color 0.25s ease, border-color 0.25s ease;
+      background: rgba(20,28,46,0.72);
+      color: var(--text);
+      transition: transform 0.25s ease, border-color 0.25s ease, background-color 0.25s ease, color 0.25s ease;
+      box-shadow: none;
+    }
+
+    .btn:hover {
+      border-color: rgba(255,255,255,0.32);
+      transform: translateY(-1px);
     }
 
     .btn.primary {
-      background: var(--accent);
-      color: #04101e;
-      box-shadow: 0 20px 40px rgba(74,212,255,0.35);
+      background: rgba(74,212,255,0.16);
+      border-color: rgba(74,212,255,0.6);
+      color: #dff7ff;
     }
     .btn.primary:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 26px 54px rgba(74,212,255,0.45);
-      background: var(--accent-strong);
+      background: rgba(74,212,255,0.24);
+      border-color: rgba(74,212,255,0.85);
+      color: #fff;
     }
 
     .btn.ghost {
-      background: rgba(20,28,46,0.72);
-      border: 1px solid var(--outline);
+      background: transparent;
+      border-color: rgba(255,255,255,0.16);
       color: var(--text);
     }
-    .btn.ghost:hover { transform: translateY(-3px); box-shadow: var(--shadow-sm); }
+    .btn.ghost:hover {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(255,255,255,0.32);
+    }
 
     .btn.logout {
-      background: rgba(24,30,46,0.82);
-      border: 1px solid var(--outline);
+      background: transparent;
+      border-color: rgba(255,255,255,0.12);
       color: var(--text);
     }
     .btn.logout:hover {
-      background: var(--warn);
-      border-color: rgba(255,255,255,0.12);
-      color: #fff;
-      box-shadow: 0 20px 46px rgba(255,61,97,0.42);
+      background: rgba(255,82,100,0.12);
+      border-color: rgba(255,82,100,0.6);
+      color: #ff8a99;
     }
 
     .hero {
@@ -482,9 +500,9 @@
     .dropzone span { color: var(--muted); font-size: 0.92rem; }
 
     .dropzone.is-hovered {
-      border-color: rgba(255,255,255,0.34);
-      transform: translateY(-4px);
-      box-shadow: 0 26px 56px rgba(6,10,22,0.5);
+      border-color: rgba(74,212,255,0.5);
+      transform: translateY(-2px);
+      background: rgba(20,30,52,0.9);
     }
 
     .file-chooser {
@@ -497,15 +515,20 @@
     input[type="file"] { position: absolute; left: -9999px; }
 
     .choose-btn {
-      background: rgba(21,30,48,0.78);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(24,32,50,0.72);
+      border: 1px solid rgba(255,255,255,0.12);
       border-radius: 14px;
       color: var(--text);
       padding: 10px 18px;
       cursor: pointer;
-      transition: transform 0.25s ease, box-shadow 0.25s ease;
+      transition: border-color 0.25s ease, background-color 0.25s ease, color 0.25s ease;
+      box-shadow: none;
     }
-    .choose-btn:hover { transform: translateY(-3px); box-shadow: var(--shadow-sm); }
+    .choose-btn:hover {
+      background: rgba(74,212,255,0.12);
+      border-color: rgba(74,212,255,0.5);
+      color: #dff7ff;
+    }
 
     .file-name {
       font-size: 0.85rem;
@@ -851,14 +874,11 @@
 <body>
   <header class="topbar" role="banner">
     <div class="topbar-inner">
-      <a class="brand" href="/" aria-label="ADEdge home">
-        <div>
-          <div class="brand-name">
-            <span class="prefix">AD</span>
-            <img src="https://files.catbox.moe/bmjajo.webp" alt="ADEdge emblem" class="brand-mark" />
-            <span class="suffix">Edge</span>
-          </div>
-          <span class="brand-subtitle">Creative delivery console</span>
+      <a class="brand" href="/" aria-label="Edge home">
+        <img src="https://files.catbox.moe/bmjajo.webp" alt="Edge emblem" class="brand-mark" />
+        <div class="brand-text">
+          <span class="brand-name">Edge</span>
+          <span class="brand-subtitle">Image host made free</span>
         </div>
       </a>
 
@@ -872,9 +892,9 @@
   <section class="hero" aria-labelledby="heroTitle">
     <div class="container hero-inner">
       <div class="hero-copy">
-        <span class="eyebrow">Creative delivery control</span>
-        <h1 id="heroTitle">Distribute media with a dashboard built for live campaigns.</h1>
-        <p>ADEdge keeps visual assets moving fast. Upload, organize, and share production-ready images or video instantly while the control panel highlights the health of your delivery footprint.</p>
+        <span class="eyebrow">Session overview</span>
+        <h1 id="heroTitle">Keep uploads, metrics, and activity aligned in one workspace.</h1>
+        <p>Track what changed, refresh the gallery, and manage assets without leaving this dashboard.</p>
         <div class="hero-actions">
           <a class="btn primary" href="#main">Start uploading</a>
           <span class="muted">Liquid glass UI · Realtime focus</span>
@@ -906,7 +926,7 @@
         <div class="card-header">
           <div>
             <h2 id="uploadTitle">Upload center</h2>
-            <p class="muted">Drop a file or use the picker. ADEdge will store it behind your token-protected endpoint.</p>
+            <p class="muted">Drop a file or use the picker. Edge stores it behind your token-protected endpoint.</p>
           </div>
           <div class="pill">Secure</div>
         </div>
@@ -917,7 +937,7 @@
           </div>
           <div>
             <strong>Drop media to upload</strong>
-            <span>Images, GIFs, MP4 previews — ADEdge handles them in seconds.</span>
+            <span>Images, GIFs, MP4 previews — Edge handles them in seconds.</span>
           </div>
         </div>
 
@@ -941,7 +961,7 @@
       <section class="card gallery-card" aria-labelledby="galleryTitle">
         <div class="card-header">
           <h2 id="galleryTitle">Recent media</h2>
-          <p class="muted">Latest uploads hydrate automatically so you can copy, preview, or open the CDN URL.</p>
+          <p class="muted">Latest uploads stay in sync so you can copy, preview, or open the direct URL.</p>
         </div>
 
         <div id="imagesGrid" class="images-grid" role="list" aria-live="polite"></div>
@@ -962,7 +982,7 @@
     <article class="liquid-card">
       <div class="pill">Monitoring</div>
       <h3>Heat-aware health checks</h3>
-      <p>Monitor spikes in demand with adaptive probes that surface region latency and CDN cache responses right inside the console.</p>
+      <p>Monitor spikes in demand with adaptive probes that surface region latency and cache responses right inside the console.</p>
     </article>
     <article class="liquid-card">
       <div class="pill">Collaboration</div>
@@ -1007,8 +1027,8 @@
 
   <section class="container cta-strip" aria-label="Collaboration callout">
     <div>
-      <h2>Scale creative delivery with ADEdge</h2>
-      <p>Invite your team, automate uploads, and keep every campaign asset at your fingertips.</p>
+      <h2>Ready for another batch?</h2>
+      <p>Loop back to the uploader whenever you need to push fresh assets or refresh previews.</p>
     </div>
     <a class="btn ghost" href="#uploadTitle">Return to uploader</a>
   </section>
@@ -1044,6 +1064,7 @@
       const imagesGrid = document.getElementById('imagesGrid');
       const galleryEmpty = document.getElementById('galleryEmpty');
       const logoutBtn = document.getElementById('logoutBtn');
+      const topbar = document.querySelector('.topbar');
 
       const previewModal = document.getElementById('previewModal');
       const modalImg = document.getElementById('modalImg');
@@ -1061,6 +1082,15 @@
           if(token) localStorage.setItem(TOKEN_KEY, token);
           else localStorage.removeItem(TOKEN_KEY);
         } catch(e){ /* ignore */ }
+      }
+
+      if(topbar){
+        const updateTopbar = () => {
+          const atTop = window.scrollY <= 8;
+          topbar.classList.toggle('is-scrolled', !atTop);
+        };
+        updateTopbar();
+        window.addEventListener('scroll', updateTopbar, { passive: true });
       }
 
       if(logoutBtn){
