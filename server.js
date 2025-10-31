@@ -454,6 +454,17 @@ async function init() {
       }
     });
 
+    app.get('/settings', (req, res) => {
+      try {
+        const username = checkAuthFromReq(req);
+        if (!username) return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+        return res.sendFile(path.join(__dirname, 'public', 'settings.html'));
+      } catch (err) {
+        console.error('Error serving /settings', err);
+        return jsonError(res, 500, 'Internal server error');
+      }
+    });
+
     app.get('/healthz', (req, res) => res.json({ ok: true }));
 
     // View page for Discord/OG embedding: green background and OG tags

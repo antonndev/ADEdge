@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const genBinary = document.getElementById('genBinary');
   const genMultipart = document.getElementById('genMultipart');
   const downloadLink = document.getElementById('downloadLink');
+  const createAccountModal = document.getElementById('createAccountModal');
   const imagesGrid = document.getElementById('imagesGrid');
   const galleryEmpty = document.getElementById('galleryEmpty');
 
@@ -21,11 +22,99 @@ document.addEventListener('DOMContentLoaded', () => {
   if (imagesGrid) loadGallery(imagesGrid, galleryEmpty);
 
   // Settings bindings
-  const topbar = document.getElementById('settingsTopbar');
-  if (topbar) {
-    const toggleCompact = () => topbar.classList.toggle('is-compact', window.scrollY > 12);
-    toggleCompact();
-    window.addEventListener('scroll', toggleCompact, { passive: true });
+  const settingsMenuToggle = document.getElementById('settingsMenuToggle');
+  const settingsMenuClose = document.getElementById('settingsMenuClose');
+  const settingsNav = document.getElementById('settingsNav');
+  const settingsNavBackdrop = document.getElementById('settingsNavBackdrop');
+  const settingsPanels = document.querySelectorAll('[data-settings-panel]');
+  const navButtons = settingsNav ? Array.from(settingsNav.querySelectorAll('[data-panel-target]')) : [];
+  const backgroundFileName = document.getElementById('backgroundFileName');
+  const backgroundUploadLabel = document.getElementById('backgroundUploadLabel');
+
+  let activePanel = 'preferences';
+
+  function switchSettingsPanel(id) {
+    if (!id) return;
+    activePanel = id;
+    navButtons.forEach(btn => {
+      const isActive = btn.dataset.panelTarget === id;
+      btn.classList.toggle('active', isActive);
+      btn.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    settingsPanels.forEach(panel => {
+      const match = panel.dataset.settingsPanel === id;
+      panel.classList.toggle('is-active', match);
+    });
+  }
+
+  if (settingsNav && navButtons.length) {
+    const media = window.matchMedia('(min-width: 1024px)');
+    const openNav = () => {
+      settingsNav.classList.add('is-open');
+      settingsNavBackdrop?.classList.add('visible');
+      settingsNavBackdrop?.removeAttribute('hidden');
+    };
+
+    const closeNav = (force = false) => {
+      if (media.matches && !force) return;
+      if (!settingsNav.classList.contains('is-open') && !media.matches) return;
+      settingsNav.classList.remove('is-open');
+      settingsNavBackdrop?.classList.remove('visible');
+      settingsNavBackdrop?.setAttribute('hidden', 'hidden');
+    };
+
+    const syncDesktopState = () => {
+      if (media.matches) {
+        settingsNav.classList.add('is-open');
+        settingsNavBackdrop?.classList.remove('visible');
+        settingsNavBackdrop?.setAttribute('hidden', 'hidden');
+      }
+    };
+    syncDesktopState();
+    media.addEventListener('change', syncDesktopState);
+
+    settingsMenuToggle?.addEventListener('click', () => {
+      if (settingsNav.classList.contains('is-open') && media.matches) return;
+      if (settingsNav.classList.contains('is-open')) closeNav();
+      else openNav();
+    });
+    settingsMenuClose?.addEventListener('click', () => closeNav(true));
+    settingsNavBackdrop?.addEventListener('click', () => closeNav(true));
+
+    document.addEventListener('keydown', evt => {
+      if (evt.key === 'Escape') {
+        closeNav(true);
+        if (createAccountModal?.classList.contains('open')) closeModal(createAccountModal);
+      }
+    });
+
+    navButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset.panelTarget;
+        if (!target) return;
+        switchSettingsPanel(target);
+        if (!window.matchMedia('(min-width: 1024px)').matches) {
+          closeNav();
+        }
+      });
+    });
+
+    switchSettingsPanel(activePanel);
+
+    settingsNav.addEventListener('pointermove', evt => {
+      const rect = settingsNav.getBoundingClientRect();
+      const x = ((evt.clientX - rect.left) / rect.width) * 100;
+      const y = ((evt.clientY - rect.top) / rect.height) * 100;
+      settingsNav.style.setProperty('--cursor-x', `${x}%`);
+      settingsNav.style.setProperty('--cursor-y', `${y}%`);
+      settingsNav.style.setProperty('--cursor-opacity', '0.75');
+      settingsNav.classList.add('glow-active');
+    });
+
+    settingsNav.addEventListener('pointerleave', () => {
+      settingsNav.style.setProperty('--cursor-opacity', '0');
+      settingsNav.classList.remove('glow-active');
+    });
   }
 
   const preferencesCard = document.getElementById('preferencesCard');
@@ -54,7 +143,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const accountsList = document.getElementById('accountsList');
   const accountsStatus = document.getElementById('accountsStatus');
   const openCreateAccount = document.getElementById('openCreateAccount');
-  const createAccountModal = document.getElementById('createAccountModal');
   const createAccountForm = document.getElementById('createAccountForm');
   const createAccountStatus = document.getElementById('createAccountStatus');
 
@@ -91,9 +179,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (backgroundUploadBtn) {
       backgroundUploadBtn.addEventListener('click', () => handleBackgroundUpload(backgroundUploadInput));
     }
+    if (backgroundUploadInput) {
+      backgroundUploadInput.addEventListener('change', () => {
+        updateBackgroundFilename();
+        if (backgroundUploadInput.files && backgroundUploadInput.files[0]) {
+          setStatus(preferencesStatus, 'Custom image selected. Apply to preview it.', true);
+        }
+      });
+    }
     if (resetBackgroundBtn) {
       resetBackgroundBtn.addEventListener('click', () => saveBackgroundPreference(Object.assign({}, defaultBackground)));
     }
+  }
+
+  if (backgroundFileName) {
+    updateBackgroundFilename();
   }
 
   if (accountBasicsForm) {
@@ -108,7 +208,6 @@ document.addEventListener('DOMContentLoaded', () => {
     openCreateAccount.addEventListener('click', () => openModal(createAccountModal));
     modalCloseButtons.forEach(btn => btn.addEventListener('click', () => closeModal(createAccountModal)));
     createAccountModal.addEventListener('click', evt => { if (evt.target === createAccountModal) closeModal(createAccountModal); });
-    document.addEventListener('keydown', evt => { if (evt.key === 'Escape') closeModal(createAccountModal); });
     createAccountForm.addEventListener('submit', e => handleCreateAccount(e));
   }
 
@@ -290,6 +389,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function updateBackgroundFilename() {
+    if (!backgroundFileName) return;
+    const file = backgroundUploadInput && backgroundUploadInput.files && backgroundUploadInput.files[0];
+    backgroundFileName.textContent = file ? file.name : 'No file selected';
+    if (backgroundUploadLabel) {
+      backgroundUploadLabel.classList.toggle('has-file', Boolean(file));
+    }
+  }
+
   async function saveBackgroundPreference(preference) {
     if (!preference) return;
     setStatus(preferencesStatus, 'Saving background...', true);
@@ -324,6 +432,7 @@ document.addEventListener('DOMContentLoaded', () => {
       reflectBackground(json.backgroundPreference);
       setStatus(preferencesStatus, 'Custom background applied.', true);
       inputEl.value = '';
+      updateBackgroundFilename();
     } catch (err) {
       console.error(err);
       setStatus(preferencesStatus, err.message || 'Upload failed.', false);
@@ -448,11 +557,19 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/account/users');
       if (res.status === 403) {
         accountsCard.style.display = 'none';
+        const adminNavBtn = settingsNav?.querySelector('[data-panel-target="admin"]');
+        const adminPanel = document.querySelector('[data-settings-panel="admin"]');
+        adminNavBtn?.setAttribute('hidden', 'hidden');
+        adminNavBtn?.classList.remove('active');
+        adminPanel?.setAttribute('hidden', 'hidden');
+        adminPanel?.classList.remove('is-active');
+        if (activePanel === 'admin') switchSettingsPanel('preferences');
         return;
       }
       if (!res.ok) throw new Error('Failed to load users');
       const json = await res.json();
       if (!json.success) throw new Error(json.error || 'Failed to load users');
+      accountsCard.style.display = '';
       const users = Array.isArray(json.users) ? json.users : [];
       accountsList.innerHTML = '';
       if (!users.length) {
@@ -570,6 +687,24 @@ document.addEventListener('DOMContentLoaded', () => {
         reflectBackground(accountProfile.backgroundPreference);
       } else {
         reflectBackground(Object.assign({}, defaultBackground));
+      }
+      if (settingsNav) {
+        const adminNavBtn = settingsNav.querySelector('[data-panel-target="admin"]');
+        const adminPanel = document.querySelector('[data-settings-panel="admin"]');
+        if (adminNavBtn && adminPanel) {
+          if (accountProfile.username === 'admin') {
+            adminNavBtn.removeAttribute('hidden');
+            adminPanel.removeAttribute('hidden');
+          } else {
+            adminNavBtn.setAttribute('hidden', 'hidden');
+            adminNavBtn.classList.remove('active');
+            adminPanel.classList.remove('is-active');
+            adminPanel.setAttribute('hidden', 'hidden');
+            if (activePanel === 'admin') {
+              switchSettingsPanel('preferences');
+            }
+          }
+        }
       }
     } catch (err) {
       console.error(err);
