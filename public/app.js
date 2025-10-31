@@ -65,11 +65,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       requestAnimationFrame(() => {
-        const rect = settingsNav.getBoundingClientRect();
-        const width = rect.width || 0;
-        const margin = media.matches ? 26 : -6;
-        const offset = Math.max(0, Math.round(width + margin));
-        settingsStage.style.setProperty('--drawer-offset', `${offset}px`);
+        if (!settingsNav.classList.contains('is-open')) {
+          settingsStage.style.setProperty('--drawer-offset', '0px');
+          return;
+        }
+        const navRect = settingsNav.getBoundingClientRect();
+        const toggleRect = settingsMenuToggle?.getBoundingClientRect();
+        if (!toggleRect) return;
+        const gap = media.matches ? 20 : 12;
+        const desired = navRect.right - toggleRect.left + gap;
+        const max = window.innerWidth - toggleRect.width - toggleRect.left - gap;
+        const clamped = Math.max(0, Math.min(desired, max));
+        settingsStage.style.setProperty('--drawer-offset', `${Math.round(clamped)}px`);
       });
     };
     updateDrawerOffsetFn = updateDrawerOffset;
