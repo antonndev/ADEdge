@@ -6,6 +6,36 @@
   <title>ShareX · Settings</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/public/style.css" />
+  <style>
+    .sxcu-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin: 18px 0 10px;
+    }
+
+    .btn.outline {
+      border: 1px solid rgba(143,160,198,0.32);
+      background: rgba(10,14,24,0.25);
+      color: #f1f5ff;
+      padding: 10px 18px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background-color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+    }
+
+    .btn.outline:hover {
+      transform: translateY(-2px);
+      border-color: rgba(143,160,198,0.6);
+      background: rgba(143,160,198,0.12);
+    }
+
+    .download-area {
+      min-height: 28px;
+      font-size: 0.9rem;
+      color: rgba(201,210,235,0.88);
+    }
+  </style>
 </head>
 <body class="app">
   <header class="topbar">
@@ -58,6 +88,18 @@
 
         <div id="settingsMsg" class="settings-msg" aria-live="polite"></div>
       </form>
+    </section>
+
+    <section class="card settings-card">
+      <h2>ShareX integration</h2>
+      <p class="muted">Generate a ready-to-import profile for ShareX. The .sxcu files include your token so you can capture and upload directly into ADEdge.</p>
+
+      <div class="sxcu-row">
+        <button id="genBinary" class="btn outline" type="button">Generate .sxcu (Binary)</button>
+        <button id="genMultipart" class="btn outline" type="button">Generate .sxcu (Multipart)</button>
+      </div>
+
+      <div id="downloadLink" class="download-area" aria-live="polite"></div>
     </section>
   </main>
 
