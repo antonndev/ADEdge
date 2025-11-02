@@ -2,25 +2,20 @@
 'use strict';
 
 /**
- * server.js - per-user images + ShareX email binding
+ * server.js - per-user images + ShareX email binding + HTTP+HTTPS
  *
  * Ce face varianta asta:
- * - .env bootstrap ca înainte
- * - users.json bootstrap: fiecare user are acum și `images: []`
- * - când urci o poză autenticat prin dashboard (/api/upload), punem meta în images global + user.images
- * - când urci cu ShareX public (/upload):
- *     - ShareX trimite Authorization: Bearer <token> și X-User-Email: <email>
- *     - server găsește userul după email și îi adaugă poza în user.images
- * - /api/images întoarce DOAR pozele userului logat (din users.json)
- * - /api/generate-sxcu bagă emailul userului curent în Headers ("X-User-Email")
+ * - tot ce aveai deja (users per-image, upload, ShareX, dashboard, delete by filename etc.)
+ * - suport pentru 2 porturi:
+ *    - HTTP  (PORT)
+ *    - HTTPS (PORT_HTTPS) cu certificat din .env
  *
- * Ce am adăugat pentru tine acum:
- * - DELETE /api/images (body JSON { filename })
- *   -> șterge fișierul din uploads/
- *   -> elimină toate meta entries cu acel filename din images.json (global)
- *   -> elimină aceleași meta entries din fiecare user din users.json
- *
- * Rămâne și ruta /api/images/:id pentru compat (ShareX etc.), dar dashboard-ul tău nou folosește doar DELETE /api/images.
+ * IMPORTANT:
+ *  În .env trebuie să ai și:
+ *    PORT=80
+ *    PORT_HTTPS=443
+ *    SSL_KEY_PATH=/cale/la/privkey.pem
+ *    SSL_CERT_PATH=/cale/la/fullchain.pem
  */
 
 const fs = require('fs');
@@ -28,6 +23,9 @@ const fsp = fs.promises;
 const path = require('path');
 const crypto = require('crypto');
 const readline = require('readline');
+
+const http = require('http');
+const https = require('https');
 
 const express = require('express');
 const cookieParser = require('cookie-parser');
@@ -53,6 +51,7 @@ const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 const DEFAULTS = {
   PORT: 3000,
+  PORT_HTTPS: 443,
   UPLOAD_DIR: 'uploads',
   MAX_UPLOAD_BYTES: 10 * 1024 * 1024,
   RATE_LIMIT_TOKENS: 20,
@@ -62,9 +61,9 @@ const DEFAULTS = {
 const DEFAULT_BACKGROUND = { type: 'color', value: '#05080f' };
 const TEMPLATE_BACKGROUNDS = [
   'https://images.unsplash.com/photo-1526481280695-3c469be254d2?auto=format&fit=crop&w=1600&q=80',
-  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&q=80',
-  'https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=1600&q=80',
-  'https://images.unsplash.com/photo-1451188214936-ec16af5ca155?auto=format&fit=crop&w=1600&q=80'
+  'https://cdn.wallpapersafari.com/72/26/fVpc1S.jpg',
+  'https://i.imgur.com/bLxcjh3.png',
+  'https://wallpapercave.com/wp/wp4511654.jpg'
 ];
 
 // în memorie doar prima dată
@@ -78,6 +77,7 @@ let registerBlocked = false;
 function randHex(len = 32) { return crypto.randomBytes(len).toString('hex'); }
 
 // ===================== ENV bootstrap =====================
+// asta are grijă să NU-ȚI RUPĂ variabilele extra din .env (PORT_HTTPS, SSL_KEY_PATH etc)
 function ensureEnv() {
   // dacă .env există deja
   if (fs.existsSync(ENV_PATH)) {
@@ -97,17 +97,34 @@ function ensureEnv() {
       changed = true;
     }
 
+    // dacă lipsesc cheile pentru https, le punem dacă e nevoie
+    if (!kv.PORT_HTTPS) {
+      kv.PORT_HTTPS = DEFAULTS.PORT_HTTPS;
+      changed = true;
+    }
+    if (typeof kv.SSL_KEY_PATH === 'undefined') {
+      kv.SSL_KEY_PATH = '';
+      changed = true;
+    }
+    if (typeof kv.SSL_CERT_PATH === 'undefined') {
+      kv.SSL_CERT_PATH = '';
+      changed = true;
+    }
+
     if (changed) {
       const header = '# Auto-generated .env - do not commit to git';
       const content = [
         header,
         `PORT=${kv.PORT || DEFAULTS.PORT}`,
+        `PORT_HTTPS=${kv.PORT_HTTPS || DEFAULTS.PORT_HTTPS}`,
         `UPLOAD_DIR=${kv.UPLOAD_DIR || DEFAULTS.UPLOAD_DIR}`,
         `MAX_UPLOAD_BYTES=${kv.MAX_UPLOAD_BYTES || DEFAULTS.MAX_UPLOAD_BYTES}`,
         `RATE_LIMIT_TOKENS=${kv.RATE_LIMIT_TOKENS || DEFAULTS.RATE_LIMIT_TOKENS}`,
         `RATE_LIMIT_REFILL=${kv.RATE_LIMIT_REFILL || DEFAULTS.RATE_LIMIT_REFILL}`,
         `SESSION_SECRET=${kv.SESSION_SECRET}`,
-        `UPLOAD_TOKEN_HASH=${kv.UPLOAD_TOKEN_HASH}`
+        `UPLOAD_TOKEN_HASH=${kv.UPLOAD_TOKEN_HASH}`,
+        `SSL_KEY_PATH=${kv.SSL_KEY_PATH || ''}`,
+        `SSL_CERT_PATH=${kv.SSL_CERT_PATH || ''}`
       ].join('\n') + '\n';
 
       fs.writeFileSync(ENV_PATH, content, 'utf8');
@@ -116,7 +133,7 @@ function ensureEnv() {
     return false;
   }
 
-  // .env nu există -> îl creăm acum
+  // .env nu există -> îl creăm acum prima dată
   const uploadTokenPlain = randHex(24);
   const uploadTokenHash = bcrypt.hashSync(uploadTokenPlain, 10);
   const sessionSecret = randHex(32);
@@ -124,12 +141,15 @@ function ensureEnv() {
   const content = [
     '# Auto-generated .env - do not commit to git',
     `PORT=${process.env.PORT || DEFAULTS.PORT}`,
+    `PORT_HTTPS=${process.env.PORT_HTTPS || DEFAULTS.PORT_HTTPS}`,
     `UPLOAD_DIR=${process.env.UPLOAD_DIR || DEFAULTS.UPLOAD_DIR}`,
     `MAX_UPLOAD_BYTES=${process.env.MAX_UPLOAD_BYTES || DEFAULTS.MAX_UPLOAD_BYTES}`,
     `RATE_LIMIT_TOKENS=${process.env.RATE_LIMIT_TOKENS || DEFAULTS.RATE_LIMIT_TOKENS}`,
     `RATE_LIMIT_REFILL=${process.env.RATE_LIMIT_REFILL || DEFAULTS.RATE_LIMIT_REFILL}`,
     `SESSION_SECRET=${sessionSecret}`,
-    `UPLOAD_TOKEN_HASH=${uploadTokenHash}`
+    `UPLOAD_TOKEN_HASH=${uploadTokenHash}`,
+    `SSL_KEY_PATH=${process.env.SSL_KEY_PATH || ''}`,
+    `SSL_CERT_PATH=${process.env.SSL_CERT_PATH || ''}`
   ].join('\n') + '\n';
 
   fs.writeFileSync(ENV_PATH, content, 'utf8');
@@ -299,6 +319,7 @@ function setRegisterBlocked(val) {
 }
 
 // ===================== helpers env update =====================
+// (actualizat ca să menținem PORT_HTTPS și SSL_* când se schimbă tokenul)
 function setUploadTokenHashInEnv(newHash) {
   let raw = '';
   if (fs.existsSync(ENV_PATH)) raw = fs.readFileSync(ENV_PATH, 'utf8');
@@ -312,17 +333,23 @@ function setUploadTokenHashInEnv(newHash) {
   }
   kv.UPLOAD_TOKEN_HASH = newHash;
   kv.SESSION_SECRET = kv.SESSION_SECRET || randHex(32);
+  kv.PORT_HTTPS = kv.PORT_HTTPS || DEFAULTS.PORT_HTTPS;
+  kv.SSL_KEY_PATH = kv.SSL_KEY_PATH || '';
+  kv.SSL_CERT_PATH = kv.SSL_CERT_PATH || '';
 
   const header = '# Auto-generated .env - do not commit to git';
   const content = [
     header,
     `PORT=${kv.PORT || DEFAULTS.PORT}`,
+    `PORT_HTTPS=${kv.PORT_HTTPS}`,
     `UPLOAD_DIR=${kv.UPLOAD_DIR || DEFAULTS.UPLOAD_DIR}`,
     `MAX_UPLOAD_BYTES=${kv.MAX_UPLOAD_BYTES || DEFAULTS.MAX_UPLOAD_BYTES}`,
     `RATE_LIMIT_TOKENS=${kv.RATE_LIMIT_TOKENS || DEFAULTS.RATE_LIMIT_TOKENS}`,
     `RATE_LIMIT_REFILL=${kv.RATE_LIMIT_REFILL || DEFAULTS.RATE_LIMIT_REFILL}`,
     `SESSION_SECRET=${kv.SESSION_SECRET}`,
-    `UPLOAD_TOKEN_HASH=${kv.UPLOAD_TOKEN_HASH}`
+    `UPLOAD_TOKEN_HASH=${kv.UPLOAD_TOKEN_HASH}`,
+    `SSL_KEY_PATH=${kv.SSL_KEY_PATH}`,
+    `SSL_CERT_PATH=${kv.SSL_CERT_PATH}`
   ].join('\n') + '\n';
 
   fs.writeFileSync(ENV_PATH, content, 'utf8');
@@ -358,7 +385,10 @@ async function init() {
     ensureSettingsFile(); // load registerBlocked
     require('dotenv').config();
 
-    const PORT = parseInt(process.env.PORT || DEFAULTS.PORT, 10);
+    // citim env-urile
+    const HTTP_PORT = parseInt(process.env.PORT || DEFAULTS.PORT, 10);
+    const HTTPS_PORT = parseInt(process.env.PORT_HTTPS || DEFAULTS.PORT_HTTPS, 10);
+
     const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || DEFAULTS.UPLOAD_DIR);
     const BACKGROUND_DIR = path.join(UPLOAD_DIR, 'backgrounds');
     const MAX_UPLOAD_BYTES = parseInt(process.env.MAX_UPLOAD_BYTES || DEFAULTS.MAX_UPLOAD_BYTES, 10);
@@ -366,6 +396,9 @@ async function init() {
     const RATE_LIMIT_REFILL = parseFloat(process.env.RATE_LIMIT_REFILL || DEFAULTS.RATE_LIMIT_REFILL, 10);
     let UPLOAD_TOKEN_HASH = (process.env.UPLOAD_TOKEN_HASH || '').trim();
     const SESSION_SECRET = (process.env.SESSION_SECRET || '').trim();
+
+    const SSL_KEY_PATH = process.env.SSL_KEY_PATH || '';
+    const SSL_CERT_PATH = process.env.SSL_CERT_PATH || '';
 
     if (!UPLOAD_TOKEN_HASH || !SESSION_SECRET) {
       console.error('UPLOAD_TOKEN_HASH or SESSION_SECRET missing in .env. Aborting.');
@@ -871,18 +904,7 @@ async function init() {
       return res.json({ success: true });
     });
 
-        // ===================== PUBLIC REGISTER (CREATE ACCOUNT) =====================
-    // POST /registeryouraccount/register
-    // Body JSON:
-    // {
-    //   "username": "anton.edge",
-    //   "email": "anton@example.com",
-    //   "password": "parola123"
-    // }
-    //
-    // - respectă registerBlocked (dacă ai blocat register-ul din settings)
-    // - verifică dacă username sau email există deja
-    // - salvează userul nou în users.json cu bcrypt hash
+    // ===================== PUBLIC REGISTER (CREATE ACCOUNT) =====================
     app.post('/registeryouraccount/register', async (req, res) => {
       try {
         // dacă adminul a blocat înregistrările noi
@@ -908,7 +930,6 @@ async function init() {
         const cleanUsername = username.trim();
         const cleanEmail = email.trim();
 
-        // optional: reguli simple, poți face mai strict dacă vrei
         if (!/^[a-zA-Z0-9._-]{3,32}$/.test(cleanUsername)) {
           return res.status(400).json({
             error: 'Username must be 3-32 chars (letters / numbers / . _ - ).'
@@ -1101,7 +1122,6 @@ async function init() {
     });
 
     // ===================== DELETE IMAGE BY ID (compat / ShareX)
-    // NOTE: încă există pentru DeletionURL, dar dashboard NU mai folosește asta.
     app.delete('/api/images/:id', async (req, res) => {
       try {
         const username = checkAuthFromReq(req);
@@ -1186,7 +1206,7 @@ async function init() {
           }
         });
 
-        // 4. Done. Trimitem success indiferent dacă fișierul era deja șters.
+        // 4. Done.
         return res.json({ success: true });
       } catch (err) {
         console.error('Delete error (by filename):', err);
@@ -1445,40 +1465,80 @@ async function init() {
       return jsonError(res, 500, 'Internal server error');
     });
 
-    // ===================== START SERVER =====================
-    const server = app.listen(PORT, () => {
-      console.log(`Server pornit: http://localhost:${PORT}`);
-      console.log(`Uploads dir: ${UPLOAD_DIR}`);
-      console.log(`Registration lock: ${getRegisterBlocked() ? 'BLOCKED' : 'OPEN'}`);
-
-      if (initialUploadTokenPlain) {
-        console.log('===================================================================');
-        console.log('FIRST RUN: a UPLOAD TOKEN was generated automatically (one-time). Copy it now:');
-        console.log(initialUploadTokenPlain);
-        console.log('===================================================================');
-      } else {
-        console.log('If you need an upload token, set it via Settings -> Set new Upload Token.');
-      }
-
-      if (initialAdminPasswordPlain) {
-        console.log('===================================================================');
-        console.log('FIRST RUN: default admin created. Username: admin');
-        console.log('Password (one-time, copy it now):');
-        console.log(initialAdminPasswordPlain);
-        console.log('Change it ASAP in Settings.');
-        console.log('===================================================================');
-      } else {
-        console.log('Admin user exists (or was created interactively).');
-      }
+    // ===================== START HTTP + HTTPS =====================
+    // Server HTTP
+    const httpServer = http.createServer(app);
+    httpServer.listen(HTTP_PORT, () => {
+      console.log(`HTTP server pornit:  http://localhost:${HTTP_PORT}`);
     });
+    httpServer.on('error', (err) => {
+      console.error('HTTP error:', err.message || err);
+    });
+
+    // Server HTTPS (doar dacă avem key+cert și port definit)
+    let httpsServer = null;
+    if (SSL_KEY_PATH && SSL_CERT_PATH && fs.existsSync(SSL_KEY_PATH) && fs.existsSync(SSL_CERT_PATH)) {
+      try {
+        const httpsOptions = {
+          key: fs.readFileSync(SSL_KEY_PATH),
+          cert: fs.readFileSync(SSL_CERT_PATH)
+        };
+        httpsServer = https.createServer(httpsOptions, app);
+        httpsServer.listen(HTTPS_PORT, () => {
+          console.log(`HTTPS server pornit: https://localhost:${HTTPS_PORT}`);
+        });
+        // asta e ce îți lipsea ca să vezi de ce NU pornește 443
+        httpsServer.on('error', (err) => {
+          console.error('HTTPS error:', err.message || err);
+        });
+      } catch (err) {
+        console.error('Nu am putut porni HTTPS:', err.message || err);
+      }
+    } else {
+      console.log('HTTPS NU a pornit (SSL_KEY_PATH / SSL_CERT_PATH lipsesc sau nu există pe disc).');
+      console.log('SSL_KEY_PATH =', SSL_KEY_PATH);
+      console.log('SSL_CERT_PATH =', SSL_CERT_PATH);
+    }
+
+    console.log(`Uploads dir: ${UPLOAD_DIR}`);
+    console.log(`Registration lock: ${getRegisterBlocked() ? 'BLOCKED' : 'OPEN'}`);
+
+    if (initialUploadTokenPlain) {
+      console.log('===================================================================');
+      console.log('FIRST RUN: a UPLOAD TOKEN was generated automatically (one-time). Copy it now:');
+      console.log(initialUploadTokenPlain);
+      console.log('===================================================================');
+    } else {
+      console.log('If you need an upload token, set it via Settings -> Set new Upload Token.');
+    }
+
+    if (initialAdminPasswordPlain) {
+      console.log('===================================================================');
+      console.log('FIRST RUN: default admin created. Username: admin');
+      console.log('Password (one-time, copy it now):');
+      console.log(initialAdminPasswordPlain);
+      console.log('Change it ASAP in Settings.');
+      console.log('===================================================================');
+    } else {
+      console.log('Admin user exists (or was created interactively).');
+    }
 
     // graceful shutdown
     function graceful(signal) {
       console.log(`Received ${signal}, shutting down...`);
-      server.close(() => {
+
+      httpServer.close(() => {
         console.log('HTTP server closed');
-        process.exit(0);
+        if (httpsServer) {
+          httpsServer.close(() => {
+            console.log('HTTPS server closed');
+            process.exit(0);
+          });
+        } else {
+          process.exit(0);
+        }
       });
+
       setTimeout(() => {
         console.warn('Force exit');
         process.exit(1);

@@ -444,10 +444,11 @@
     .main-grid-wrapper {
       position: relative;
       margin-top: -40px;
-      padding-bottom: 80px;
+      padding-bottom: 160px;
     }
 
     .main-grid {
+      top: -170px;
       display: grid;
       grid-template-columns: repeat(12, 1fr);
       gap: 26px;
@@ -779,19 +780,33 @@
     .timeline-body strong { display: block; font-size: 1rem; margin-bottom: 6px; }
     .timeline-body span { color: var(--text-soft); font-size: 0.9rem; }
 
-    .cta-strip {
-      margin: 80px 0 70px;
-      background: rgba(18,26,46,0.9);
-      border: 1px solid var(--outline);
-      border-radius: var(--radius-lg);
-      padding: 36px 40px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 24px;
-      flex-wrap: wrap;
-      box-shadow: var(--shadow-md);
-    }
+.cta-strip {
+  margin: 80px 0 70px;
+  margin-left: 170px; /* împinsă fix la dreapta pe desktop */
+  background: rgba(18,26,46,0.9);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-lg);
+  padding: 36px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow-md);
+  width: calc(100% - 170px); /* 🧠 compensează margin-left */
+  box-sizing: border-box;
+}
+
+/* pe mobile (sub 768px) — o lăsăm full width */
+@media (max-width: 768px) {
+  .cta-strip {
+    margin-left: 0;
+    width: 100%;
+    padding: 24px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
 
     .cta-strip h2 { margin: 0; font-size: 1.6rem; }
     .cta-strip p { margin: 0; color: var(--muted); }

@@ -1,1 +1,18 @@
-[]
+{
+  "users": [
+    {
+      "username": "admin",
+      "password_hash": "$2a$10$KOjr8cuX2NCjC0wzR6IZ1.XlmIxHPcY4uz8C3969BuqFFPAPMuUZO",
+      "email": "pula@gmail.com",
+      "created_at": 1762099429250,
+      "role": "admin",
+      "preferences": {
+        "background": {
+          "type": "color",
+          "value": "#05080f"
+        }
+      },
+      "images": []
+    }
+  ]
+}

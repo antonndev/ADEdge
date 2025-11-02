@@ -6,8 +6,8 @@
   <link id="favicon" rel="icon" type="image/png" href="resources/adsetups-dark.png" sizes="14x14" />
   <title>ADEdge · Dashboard</title>
 
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+   <link href="https://fonts.cdnfonts.com/css/gg-sans-2" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link
     rel="stylesheet"
     href="https://site-assets.fontawesome.com/releases/v7.0.0/css/all.css"
@@ -31,10 +31,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-
-  <!-- dashboard.css e stylesheet-ul tău -->
-  <style>
-        :root {
+</head>
+<style>
+      :root {
       --bg:#05080f;
       --surface:#0d1424;
       --surface-soft:rgba(18,27,44,0.82);
@@ -63,7 +62,7 @@
       min-height: 100vh;
       margin: 0;
       font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background: rgba(33, 33, 33, 0.948) center/cover no-repeat fixed;
+      background: rgb(25, 25, 25) center/cover no-repeat fixed;
       color: var(--text);
       line-height: 1.55;
       position: relative;
@@ -303,13 +302,13 @@
     }
 
     .btn.primary {
-      background: rgb(2, 120, 255);
-      border: 2px solid rgba(151, 151, 151, 0.097);
+      background: rgb(0, 136, 255);
+      border-color: rgba(151, 151, 151, 0.097);
       color: #dff7ff;
     }
     .btn.primary:hover {
-      background: rgba(14, 150, 209, 0.903);
-      border: 2px solid rgba(151, 151, 151, 0.097);
+      background: rgb(3, 196, 255);
+      border-color: rgba(74,212,255,0.85);
       color: #fff;
     }
 
@@ -479,14 +478,14 @@
     .main-grid-wrapper {
       position: relative;
       margin-top: -40px;
-      padding-bottom: 80px;
+      padding-bottom: 160px;
     }
 
     .main-grid {
+      top: 100px;
       display: grid;
       grid-template-columns: repeat(12, 1fr);
       gap: 26px;
-      top: 100px;
     }
 
     .card {
@@ -497,7 +496,9 @@
       box-shadow: var(--shadow-md);
       position: relative;
       overflow: hidden;
-      transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+    }
+
+    .card::before {
       content: '';
       position: absolute;
       width: 220px;
@@ -508,7 +509,6 @@
       border-radius: 50%;
       filter: blur(0px);
       opacity: 0.55;
-      animation: liquidSheen 24s linear infinite;
       pointer-events: none;
     }
 
@@ -519,12 +519,10 @@
       border-radius: inherit;
       border: 1px solid rgba(255,255,255,0.04);
       opacity: 0;
-      transition: opacity 0.3s ease;
       pointer-events: none;
     }
 
     .card:hover {
-      transform: translateY(-10px);
       box-shadow: var(--shadow-lg);
       border-color: var(--outline-strong);
     }
@@ -536,8 +534,10 @@
 
     .revealed {
       opacity: 1;
-      transform: translateY(0);
-      transition: transform 0.6s cubic-bezier(.16,1,.3,1), opacity 0.6s ease;
+    }
+
+    .upload-card { grid-column: span 5; display: flex; flex-direction: column; gap: 22px; }
+    .gallery-card { grid-column: span 7; display: flex; flex-direction: column; gap: 22px; min-height: 360px; }
 
     .card-header {
       display: flex;
@@ -702,7 +702,7 @@
     .empty { text-align: center; padding: 60px 20px; border: 1px dashed rgba(255,255,255,0.12); border-radius: 20px; background: rgba(15,22,36,0.6); }
 
     .liquid-deck {
-      margin-top: 200px;
+      margin-top: 40px;
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 22px;
@@ -751,7 +751,7 @@
     }
 
     .liquid-card h3 {
-      margin-top: 13px;
+      margin-top: 20px;
       font-size: 1.2rem;
     }
 
@@ -815,8 +815,9 @@
     .timeline-body span { color: var(--text-soft); font-size: 0.9rem; }
 
 .cta-strip {
-  margin: 80px auto 70px; /* center horizontally */
-  background: rgba(18, 26, 46, 0.9);
+  margin: 80px 0 70px;
+  margin-left: 100px; /* împinsă fix la dreapta pe desktop */
+  background: rgba(18,26,46,0.9);
   border: 1px solid var(--outline);
   border-radius: var(--radius-lg);
   padding: 36px 40px;
@@ -826,10 +827,19 @@
   gap: 24px;
   flex-wrap: wrap;
   box-shadow: var(--shadow-md);
+  width: calc(100% - 170px); /* 🧠 compensează margin-left */
+  box-sizing: border-box;
+}
 
-  /* responsive width */
-  max-width: 1200px;
-  width: calc(100% - 40px); /* padding for left/right */
+/* pe mobile (sub 768px) — o lăsăm full width */
+@media (max-width: 768px) {
+  .cta-strip {
+    margin-left: 0;
+    width: 100%;
+    padding: 24px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
     .cta-strip h2 { margin: 0; font-size: 1.6rem; }
@@ -839,7 +849,6 @@
       padding: 40px 0 70px;
       text-align: center;
       font-size: 0.85rem;
-      left: 100px;
       color: var(--muted);
       letter-spacing: 0.12em;
       text-transform: uppercase;
@@ -923,10 +932,9 @@
       50% { transform: translate3d(-40px, 30px, 0); opacity: 0.7; }
       100% { transform: translate3d(0,0,0); opacity: 0.45; }
     }
-  </style>
-</head>
+</style>
 <body>
-  <header class="topbar" role="banner">
+ <header class="topbar" role="banner">
     <div class="topbar-inner">
 
       <!-- Brand (logo + Edge) -->
