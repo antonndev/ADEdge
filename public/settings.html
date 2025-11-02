@@ -3,64 +3,486 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ShareX · Settings</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/public/style.css" />
+  <link id="favicon" rel="icon" type="image/png" href="resources/adsetups-dark.png" sizes="14x14" />
+  <title>ADEdge · Settings</title>
+
+  <!-- 💡 pre-hide admin UI ASAP dacă știm din cache că userul nu e admin -->
+  <script>
+    (function(){
+      try {
+        if (localStorage.getItem('edge_is_admin') === '0') {
+          document.documentElement.classList.add('no-admin');
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <link href="https://fonts.cdnfonts.com/css/gg-sans-2" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/all.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/sharp-solid.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/sharp-regular.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/sharp-light.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/duotone.css"
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
-<body class="app">
-  <header class="topbar">
-    <div class="container topbar-inner">
-      <a class="brand" href="/">
-        <svg class="logo" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M3 12a9 9 0 1 1 18 0 9 9 0 0 1-18 0z" fill="currentColor"/></svg>
-        <div class="brand-text">
-          <strong>ShareX</strong>
-          <small class="muted">Settings</small>
-        </div>
-      </a>
+<link rel="stylesheet" href="settingscss.css">
+<body>
+  <style>
+        .resetbutton {
+    position: absolute;
+    align-items: center;
+    gap: 8px;
+    background: rgba(52, 50, 50, 0.06);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 7px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    flex-basis: 100%;
+    color: var(--text-strong);
+    padding: 10px 16px;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: background .2s ease, box-shadow .2s ease, border-color .2s ease;
+    top: 265px;
+    left: 170px;
+  }
+  </style>
+  <div class="settings-stage">
+    <div id="settingsNavBackdrop" class="drawer-backdrop" hidden></div>
 
-      <nav class="top-actions" aria-label="Top actions">
-        <a class="link" href="/">Dashboard</a>
-        <button id="logoutBtn" class="btn ghost">Log out</button>
+    <aside id="settingsNav" class="settings-drawer" aria-label="Settings categories">
+      <div class="drawer-top">
+        <div class="drawer-brand">
+          <div>
+            <strong>Edge</strong>
+            <span>Control</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <img src="https://files.catbox.moe/qcb3nu.webp" alt="Edge avatar" style="position: absolute; width: 65px; height: 65px; margin-top: -63px; margin-left: 35px;" />
+      </div>
+
+      <nav class="drawer-nav" role="tablist">
+        <button class="drawer-item active" type="button" data-panel-target="preferences" role="tab" aria-selected="true">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640"><path fill="#d4d4d4" d="M320 64C337.7 64 352 78.3 352 96L352 264.6L496 181.5C511.3 172.7 530.9 177.9 539.7 193.2C548.5 208.5 543.3 228.1 528 236.9L384 320L528 403.1C543.3 411.9 548.6 431.5 539.7 446.8C530.8 462.1 511.3 467.4 496 458.5L352 375.4L352 544C352 561.7 337.7 576 320 576C302.3 576 288 561.7 288 544L288 375.4L144 458.5C128.7 467.3 109.1 462.1 100.3 446.8C91.5 431.5 96.7 412 112 403.1L256 320L112 236.9C96.7 228 91.5 208.5 100.3 193.1C109.1 177.7 128.7 172.6 144 181.4L288 264.6L288 96C288 78.3 302.3 64 320 64z"/></svg>
+          <span class="preferences-text">Preferences</span>
+        </button>
+
+        <button class="drawer-item" type="button" data-panel-target="account" role="tab" aria-selected="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 12a4 4 0 100-8 4 4 0 000 8z" />
+            <path d="M4.2 20c.8-3.5 4-6 7.8-6s7 2.5 7.8 6" />
+          </svg>
+          <span>Account</span>
+        </button>
+
+        <!-- dispare instant pentru non-admin (data-admin-only + .no-admin) -->
+        <button class="drawer-item" type="button" data-panel-target="admin" data-admin-only="true" role="tab" aria-selected="false" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="19" y1="8" x2="19" y2="14" />
+            <line x1="22" y1="11" x2="16" y2="11" />
+          </svg>
+          <span>Accounts</span>
+        </button>
       </nav>
+
+      <div class="drawer-logout-wrap">
+        <button id="logoutBtn" class="logoute" type="button">
+          Log out
+        </button>
+      </div>
+    </aside>
+
+    <main class="settings-main">
+      <header class="page-hero">
+        <div>
+          <h1>Tune the experience</h1>
+          <p>Adjust your workspace, manage credentials, and hand off secure upload profiles.</p>
+        </div>
+      </header>
+
+        <div>
+          <a class="todashboard" href="/">X</a>
+        </div>
+
+      <!-- Preferences panel -->
+      <section class="settings-panel is-active" data-settings-panel="preferences">
+        <div class="settings-card" id="preferencesCard">
+          <div class="card-header">
+            <div class="meta">
+              <h2>Dashboard background</h2>
+              <p>You can customize ADEdge any way you want</p>
+            </div>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <div class="settings-grid double">
+            <div>
+              <label for="backgroundColor">Pick a colour</label>
+              <input id="backgroundColor" type="color" value="#05080f" aria-label="Choose dashboard colour" />
+            </div>
+            <div>
+              <label for="backgroundColorHex">Hex value</label>
+              <input id="backgroundColorHex" type="text" placeholder="#05080F" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="settings-actions">
+            <button id="applyColor" class="btn primary" type="button">Apply colour</button>
+            <button id="resetBackground" class="resetbutton" type="button"><i class="fa-solid fa-rotate-reverse"></i> Reset to default</button>
+          </div>
+
+          <div>
+            <label>Templates</label>
+            <div id="backgroundTemplates" class="template-grid" aria-live="polite"></div>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <div class="upload-block">
+            <div class="upload-row">
+              <div class="upload-head">
+                <div class="upload-title">Choose your own image</div>
+                <div class="upload-desc">This background will be applied just for you.</div>
+              </div>
+
+              <div class="upload-action">
+                <input id="backgroundUpload" type="file" accept="image/*" hidden />
+                <label for="backgroundUpload" class="upload-btn" id="backgroundUploadLabel">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <span>Upload</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="file-status">
+              <span id="backgroundFileName" class="file-name">No file selected</span>
+            </div>
+          </div>
+
+          <div class="settings-actions">
+            <button id="uploadBackground" class="btn primary" type="button">Apply image</button>
+          </div>
+
+          <div id="preferencesStatus" class="status-line" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <!-- Account panel -->
+      <section class="settings-panel" data-settings-panel="account">
+
+        <!-- Change information (email) -->
+        <div class="settings-card">
+          <div class="card-header">
+            <div class="meta">
+              <h2>Change information</h2>
+              <p>Keep your contact email up to date.</p>
+            </div>
+          </div>
+
+          <form id="infoForm" novalidate>
+            <div class="settings-grid double">
+              <div>
+                <label for="emailInput">Current email</label>
+                <input id="emailInput" type="email" autocomplete="email" disabled />
+              </div>
+              <div>
+                <label for="updatedEmail">Email update</label>
+                <input id="updatedEmail" type="email" placeholder="new@example.com" autocomplete="email" />
+              </div>
+            </div>
+
+            <div class="settings-actions">
+              <button class="btn primary" type="submit">Save changes</button>
+            </div>
+
+            <div id="infoStatus" class="status-line" aria-live="polite"></div>
+          </form>
+        </div>
+
+        <!-- Change password -->
+        <div class="settings-card">
+          <div class="card-header">
+            <div class="meta">
+              <h2>Change password</h2>
+              <p>Update your password with a minimum of six characters.</p>
+            </div>
+          </div>
+
+          <form id="passwordForm" novalidate>
+            <div class="password-grid">
+              <div>
+                <label for="currentPassword">Current password</label>
+                <input id="currentPassword" type="password" autocomplete="current-password" required />
+              </div>
+              <div>
+                <label for="newPassword">New password</label>
+                <input id="newPassword" type="password" autocomplete="new-password" required />
+              </div>
+              <div>
+                <label for="confirmPassword">Confirm new password</label>
+                <input id="confirmPassword" type="password" autocomplete="new-password" required />
+              </div>
+            </div>
+            <div class="settings-actions">
+              <button class="btn primary" type="submit">Update password</button>
+            </div>
+            <div id="passwordStatus" class="status-line" aria-live="polite"></div>
+          </form>
+        </div>
+
+        <!-- ShareX profiles -->
+        <div class="settings-card">
+          <div class="card-header">
+            <div class="meta">
+              <h2>ShareX profiles</h2>
+              <p>Download ready-to-import ShareX configurations with your token embedded.</p>
+            </div>
+          </div>
+          <div class="settings-actions">
+            <button id="genBinary" class="btn subtle" type="button">Binary uploader</button>
+            <button id="genMultipart" class="btn subtle" type="button">Multipart uploader</button>
+          </div>
+          <div id="downloadLink" class="status-line" data-inline="true" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <!-- Admin panel (data-admin-only => dispare complet dacă html.no-admin) -->
+      <section class="settings-panel" data-settings-panel="admin" data-admin-only="true" hidden>
+        <div class="settings-card" id="accountsCard">
+          <div class="card-header">
+            <div class="meta">
+              <h2>Team accounts</h2>
+              <p>Review users stored in <code>users.json</code>, onboard teammates, or revoke access.</p>
+            </div>
+            <button id="openCreateAccount" class="btn primary" type="button">Create account</button>
+          </div>
+          <div id="accountsList" class="settings-grid" aria-live="polite"></div>
+          <div id="accountsStatus" class="status-line" data-inline="true"></div>
+        </div>
+
+        <div class="settings-card" id="allowRegisterCard">
+          <div class="card-header">
+            <div class="meta">
+              <h2>Registration lock</h2>
+              <p>
+                <strong>Yes = Block</strong>: <code>/register</code> → 403.  
+                <strong>No = Open</strong>: <code>/register</code> → serve <code>register.html</code>.  
+                Direct <code>/register.html</code> este mereu blocat de server.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label id="allowRegisterLabel">Block registration</label>
+            <div class="segmented" role="group" aria-labelledby="allowRegisterLabel" id="allowRegisterSegmented" data-value="no">
+              <button type="button" id="allowRegisterNo" class="segmented-option" aria-pressed="true" data-value="no">No</button>
+              <button type="button" id="allowRegisterYes" class="segmented-option" aria-pressed="false" data-value="yes">Yes</button>
+            </div>
+          </div>
+
+          <div class="settings-actions">
+            <span id="registerStatus" class="status-line" data-inline="true" aria-live="polite">Loading…</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Create Account MODAL (admin only, dar oricum ascuns prin .no-admin) -->
+  <div id="createAccountModal" class="modal-backdrop" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="createAccountTitle">
+      <div class="modal-header">
+        <div class="title-block">
+          <h2 id="createAccountTitle">Create new account</h2>
+          <p>Add a teammate with dashboard access.</p>
+        </div>
+        <button class="modal-close-btn" type="button" data-close-modal aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <form id="createAccountForm" novalidate>
+          <div>
+            <label for="newUsername">Username</label>
+            <input id="newUsername" name="newUsername" type="text" placeholder="teammate" autocomplete="off" required />
+          </div>
+
+          <div>
+            <label for="newEmail">Email</label>
+            <input id="newEmail" name="newEmail" type="email" placeholder="teammate@example.com" autocomplete="off" required />
+          </div>
+
+          <div>
+            <label for="newPassword">Password</label>
+            <input id="newPassword" name="newPassword" type="password" placeholder="min. 6 characters" autocomplete="new-password" required />
+          </div>
+
+          <div>
+            <label for="confirmNewPassword">Confirm password</label>
+            <input id="confirmNewPassword" name="confirmNewPassword" type="password" placeholder="repeat password" autocomplete="new-password" required />
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn primary" type="submit">Create</button>
+            <div id="createAccountStatus" aria-live="polite"></div>
+          </div>
+        </form>
+      </div>
     </div>
-  </header>
+  </div>
 
-  <main class="container settings-layout">
-    <section class="card settings-card">
-      <h2>Account Settings</h2>
+  <!-- Toast popup global (sus dreapta) -->
+  <div id="edge-toast" class="edge-toast" role="status" aria-live="polite" aria-atomic="true" data-type="ok">
+    <div class="edge-toast-icon" id="edge-toast-icon">
+      <!-- icon dinamically replaced from JS -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 6 9 17l-5-5"/>
+      </svg>
+    </div>
+    <div class="edge-toast-msg" id="edge-toast-msg">Ready</div>
+    <button class="edge-toast-close" id="edge-toast-close" aria-label="Dismiss">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
 
-      <form id="settingsForm" novalidate>
-        <div class="field">
-          <label for="emailInput">Email</label>
-          <input id="emailInput" type="email" placeholder="you@example.com" autocomplete="email" />
-        </div>
+  <script src="/app.js?v=80" defer></script>
 
-        <div class="field">
-          <label for="currentPassword">Current password (required to change password)</label>
-          <input id="currentPassword" type="password" placeholder="Current password" autocomplete="current-password" />
-        </div>
+  <!-- Fallback/independent wiring pentru lock register + cleanup bg -->
+  <script>
+    (function () {
+      function $(id){ return document.getElementById(id); }
+      const card = $('allowRegisterCard');
+      const btnNo = $('allowRegisterNo');   // No = OPEN (blocked=false)
+      const btnYes = $('allowRegisterYes'); // Yes = BLOCK (blocked=true)
+      const segmented = $('allowRegisterSegmented');
+      const statusEl = $('registerStatus');
 
-        <div class="field">
-          <label for="newPassword">New password</label>
-          <input id="newPassword" type="password" placeholder="New password" autocomplete="new-password" />
-        </div>
+      if (!card || !btnNo || !btnYes || !segmented || !statusEl) return;
 
-        <div class="field">
-          <label for="newUploadToken">Set a new Upload Token (optional)</label>
-          <input id="newUploadToken" placeholder="New upload token (optional)" />
-          <small class="muted">If provided, this token will be used by ShareX (Authorization: Bearer ...)</small>
-        </div>
+      // dacă deja html are clasa no-admin => nici nu încercăm request-uri admin
+      if (document.documentElement.classList.contains('no-admin')) {
+        card.style.display = 'none';
+        return;
+      }
 
-        <div class="row">
-          <button id="saveSettings" class="btn primary">Save changes</button>
-          <a class="btn ghost" href="/">Back to Dashboard</a>
-        </div>
+      // verificăm cache local totuși (în caz că nu a prins clasa)
+      try {
+        if (localStorage.getItem('edge_is_admin') === '0') {
+          card.style.display = 'none';
+          return;
+        }
+      } catch(_) {}
 
-        <div id="settingsMsg" class="settings-msg" aria-live="polite"></div>
-      </form>
-    </section>
-  </main>
+      function reflect(blocked, msg) {
+        const b = !!blocked;
+        btnYes.setAttribute('aria-pressed', b ? 'true' : 'false');
+        btnNo.setAttribute('aria-pressed', b ? 'false' : 'true');
+        segmented.dataset.value = b ? 'yes' : 'no';
+        statusEl.textContent = msg || (b
+          ? 'Registration is blocked. /register returns 403 (direct /register.html is always blocked).'
+          : 'Registration is open. /register serves register.html (direct /register.html is always blocked).'
+        );
+      }
 
-  <script src="/public/app.js" defer></script>
+      async function loadState() {
+        try {
+          const r = await fetch('/api/admin/register', { method:'GET' });
+          if (r.status === 403) {
+            card.style.display = 'none';
+            try { localStorage.setItem('edge_is_admin','0'); } catch(_){}
+            document.documentElement.classList.add('no-admin');
+            return;
+          }
+          const j = await r.json();
+          reflect(Boolean(j && (j.blocked === true || j.blocked === 'true')));
+          try { localStorage.setItem('edge_is_admin','1'); } catch(_){}
+          document.documentElement.classList.remove('no-admin');
+        } catch(e) {
+          reflect(false, 'Unable to load registration state.');
+        }
+      }
+
+      async function setState(blocked) {
+        // optimist
+        reflect(blocked, blocked ? 'Blocking registration…' : 'Opening registration…');
+        try {
+          const r = await fetch('/api/admin/register', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json' },
+            body: JSON.stringify({ blocked: !!blocked })
+          });
+          const j = await r.json().catch(() => ({}));
+          if (!r.ok || j.success === false) throw new Error(j.error || 'Request failed');
+          reflect(!!j.blocked);
+        } catch(e) {
+          reflect(!blocked, 'Failed to update registration state.');
+          console.error(e);
+        }
+      }
+
+      btnNo.addEventListener('click', () => setState(false));
+      btnYes.addEventListener('click', () => setState(true));
+
+      loadState();
+    })();
+  </script>
+
+  <!-- cleanup bg inline si sync logout duplicat -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var b = document.body;
+      // curățăm stil inline vechi
+      b.style.removeProperty('background-image');
+      b.style.removeProperty('background-color');
+      b.style.removeProperty('background-size');
+      b.style.removeProperty('background-repeat');
+      b.style.removeProperty('background-position');
+      b.style.removeProperty('background-attachment');
+      b.removeAttribute('data-bg-type');
+
+      // sincronizează logout-ul din drawer cu cel existent
+      var logoutMain = document.getElementById('logoutBtn');
+      var logoutDrawer = document.getElementById('logoutBtnDrawer');
+      if (logoutDrawer && logoutMain) {
+        logoutDrawer.addEventListener('click', function () {
+          logoutMain.click();
+        });
+      }
+    });
+  </script>
 </body>
 </html>

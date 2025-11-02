@@ -1,10 +1,65 @@
 {
   "users": [
     {
+      "username": "christiannx",
+      "email": "christiann@christiandev.com",
+      "password_hash": "$2a$10$8uheuXOL7Mlef1qemnQ2jekSPh9tZuoBtL7ebDmi6rgGyKTygnPkO",
+      "created_at": 1762097032804,
+      "role": "user",
+      "preferences": {
+        "background": {
+          "type": "color",
+          "value": "#05080f"
+        }
+      },
+      "images": []
+    },
+    {
+      "username": "chrstian",
+      "email": "christian@christiandev.com",
+      "password_hash": "$2a$10$yVKrI1hm9v9ELua.0ePkD.6w6pgTLtX.YWSpVSz8jPERP2jXcuIJ6",
+      "created_at": 1762096962247,
+      "role": "user",
+      "preferences": {
+        "background": {
+          "type": "color",
+          "value": "#05080f"
+        }
+      },
+      "images": []
+    },
+    {
       "username": "admin",
-      "password_hash": "$2a$10$lDpWDiI843o7l9UyS3yJre6VcizjkvVl9sibI.i0tj6zvbK5/pPya",
-      "email": "admin@example.com",
-      "created_at": 1761908095323
+      "password_hash": "$2a$10$bUO2Jx.vnoOTIMNWDE3txu49ym/ce1GPwVPxAM9iXkOajZJhHkkCC",
+      "email": "pula@gmail.com",
+      "created_at": 1762080226214,
+      "role": "admin",
+      "preferences": {
+        "background": {
+          "type": "color",
+          "value": "#05080f"
+        }
+      },
+      "images": [
+        {
+          "id": "f9321f00-9be3-4a1b-be93-28bfd3ee6cbc",
+          "filename": "1762094960546-1950a2de-ba0a-4b8f-be92-c29d972d9f22-chrome_ZWIzxVRSKh.png",
+          "originalname": "chrome_ZWIzxVRSKh.png",
+          "size": 529352,
+          "url": "https://adedge.antonn.ro/i/1762094960546-1950a2de-ba0a-4b8f-be92-c29d972d9f22-chrome_ZWIzxVRSKh.png",
+          "uploaded_at": 1762094961898,
+          "owner": "admin"
+        },
+        {
+          "id": "ffe6f218-9a8b-4f6c-ad9b-7b409ceaa1a4",
+          "filename": "1762094998650-eba55a2d-b665-4bdd-8fe5-ad6ce044a9f1-chrome_56F3BJ5Gu8.png",
+          "originalname": "chrome_56F3BJ5Gu8.png",
+          "size": 529352,
+          "url": "https://adedge.antonn.ro/i/1762094998650-eba55a2d-b665-4bdd-8fe5-ad6ce044a9f1-chrome_56F3BJ5Gu8.png",
+          "uploaded_at": 1762095001440,
+          "owner": "admin"
+        }
+      ]
     }
   ]
 }

@@ -2,18 +2,25 @@
 'use strict';
 
 /**
- * server.js (fix) - autogenerate .env + admin user + bcrypt-hashed upload token
+ * server.js - per-user images + ShareX email binding
  *
- * Behavior:
- * - If .env missing -> create it, generate UPLOAD_TOKEN (plaintext in-memory for first-run display),
- *   hash it with bcrypt and write UPLOAD_TOKEN_HASH to .env. Also generate SESSION_SECRET.
- * - If users file missing or contains zero users -> prompt in terminal for admin password (or generate fallback),
- *   hash it with bcrypt and write default admin user (username: admin).
- * - /upload requires Authorization: Bearer <UPLOAD_TOKEN> (validated with bcrypt.compareSync against UPLOAD_TOKEN_HASH
- *   or against the in-memory token generated this run).
- * - Dashboard login uses username/password (bcrypt). Settings allow password/email change and setting a new upload token.
+ * Ce face varianta asta:
+ * - .env bootstrap ca înainte
+ * - users.json bootstrap: fiecare user are acum și `images: []`
+ * - când urci o poză autenticat prin dashboard (/api/upload), punem meta în images global + user.images
+ * - când urci cu ShareX public (/upload):
+ *     - ShareX trimite Authorization: Bearer <token> și X-User-Email: <email>
+ *     - server găsește userul după email și îi adaugă poza în user.images
+ * - /api/images întoarce DOAR pozele userului logat (din users.json)
+ * - /api/generate-sxcu bagă emailul userului curent în Headers ("X-User-Email")
  *
- * This version avoids top-level await and ensures init completes then starts server.
+ * Ce am adăugat pentru tine acum:
+ * - DELETE /api/images (body JSON { filename })
+ *   -> șterge fișierul din uploads/
+ *   -> elimină toate meta entries cu acel filename din images.json (global)
+ *   -> elimină aceleași meta entries din fiecare user din users.json
+ *
+ * Rămâne și ruta /api/images/:id pentru compat (ShareX etc.), dar dashboard-ul tău nou folosește doar DELETE /api/images.
  */
 
 const fs = require('fs');
@@ -33,11 +40,16 @@ const { v4: uuidv4 } = require('uuid');
 const {
   DATA_DIR, USERS_FILE, IMAGES_FILE,
   listImages, addImage, removeImage,
-  listUsers, findUser, createUser, updateUser
+  listUsers, findUser, createUser, updateUser, deleteUser
 } = require('./lib/db');
 
 const APP_ROOT = path.resolve(__dirname);
 const ENV_PATH = path.join(APP_ROOT, '.env');
+const PUBLIC_DIR = path.join(APP_ROOT, 'public');
+const DASHBOARD_HTML_PATH = path.join(PUBLIC_DIR, 'dashboard.html');
+
+// settings.json (pentru lock register)
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 const DEFAULTS = {
   PORT: 3000,
@@ -47,24 +59,33 @@ const DEFAULTS = {
   RATE_LIMIT_REFILL: 1
 };
 
-// In-memory plaintext upload token if generated on this run (shown once in console)
+const DEFAULT_BACKGROUND = { type: 'color', value: '#05080f' };
+const TEMPLATE_BACKGROUNDS = [
+  'https://images.unsplash.com/photo-1526481280695-3c469be254d2?auto=format&fit=crop&w=1600&q=80',
+  'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&q=80',
+  'https://images.unsplash.com/photo-1502082553048-f009c37129b9?auto=format&fit=crop&w=1600&q=80',
+  'https://images.unsplash.com/photo-1451188214936-ec16af5ca155?auto=format&fit=crop&w=1600&q=80'
+];
+
+// în memorie doar prima dată
 let initialUploadTokenPlain = null;
-// we do not store admin plaintext normally; only show generated fallback in non-TTY case
 let initialAdminPasswordPlain = null;
 
-// Utility
+// lock pentru /register
+let registerBlocked = false;
+
+// utils
 function randHex(len = 32) { return crypto.randomBytes(len).toString('hex'); }
 
-// Ensure .env exists and contains UPLOAD_TOKEN_HASH and SESSION_SECRET
+// ===================== ENV bootstrap =====================
 function ensureEnv() {
-  // if exists, load it and append missing values if any
+  // dacă .env există deja
   if (fs.existsSync(ENV_PATH)) {
     require('dotenv').config();
     let changed = false;
     const kv = Object.assign({}, process.env);
-    const lines = fs.readFileSync(ENV_PATH, 'utf8').split(/\r?\n/);
+
     if (!kv.UPLOAD_TOKEN_HASH) {
-      // create new random token, store hash and keep plaintext in memory
       const plain = randHex(24);
       const hash = bcrypt.hashSync(plain, 10);
       kv.UPLOAD_TOKEN_HASH = hash;
@@ -75,8 +96,8 @@ function ensureEnv() {
       kv.SESSION_SECRET = randHex(32);
       changed = true;
     }
+
     if (changed) {
-      // rebuild and write .env preserving header comment
       const header = '# Auto-generated .env - do not commit to git';
       const content = [
         header,
@@ -88,13 +109,14 @@ function ensureEnv() {
         `SESSION_SECRET=${kv.SESSION_SECRET}`,
         `UPLOAD_TOKEN_HASH=${kv.UPLOAD_TOKEN_HASH}`
       ].join('\n') + '\n';
+
       fs.writeFileSync(ENV_PATH, content, 'utf8');
       require('dotenv').config();
     }
     return false;
   }
 
-  // create new .env and return plaintext upload token
+  // .env nu există -> îl creăm acum
   const uploadTokenPlain = randHex(24);
   const uploadTokenHash = bcrypt.hashSync(uploadTokenPlain, 10);
   const sessionSecret = randHex(32);
@@ -113,30 +135,24 @@ function ensureEnv() {
   fs.writeFileSync(ENV_PATH, content, 'utf8');
   require('dotenv').config();
 
-  // store plaintext in memory for one-time display/generation of .sxcu
   initialUploadTokenPlain = uploadTokenPlain;
   return uploadTokenPlain;
 }
 
-// Prompt helper (hidden input) -- returns Promise<string>
-// Prompt helper (hidden input) -- returns Promise<string>
+// prompt hidden pt parola admin prima dată
 function promptHidden(query) {
   return new Promise((resolve) => {
-    const rl = require('readline').createInterface({
+    const rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
       terminal: true
     });
 
-    // păstrăm funcția originală sub un nume diferit pentru a evita recursiunea
     const origWrite = rl._writeToOutput;
-
     rl._writeToOutput = function (stringToWrite) {
       if (rl.stdoutMuted) {
-        // afișăm un asterisk în locul caracterelor tastate pentru feedback
         rl.output.write('*');
       } else {
-        // apelăm funcția originală stocată
         origWrite.call(rl, stringToWrite);
       }
     };
@@ -150,33 +166,47 @@ function promptHidden(query) {
   });
 }
 
-// Ensure data dir and default admin user; ask for password in terminal if needed.
-// Returns plaintext admin password only in the non-interactive fallback case (or null).
+// ===================== helperi user =====================
+
+// bootstrap users.json, asigurăm `images: []` și preferințe
 async function ensureDataAndAdminSync() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-  // If users file exists and has at least one user, do nothing
+  // dacă există users.json cu minim 1 user
   if (fs.existsSync(USERS_FILE)) {
     try {
       const raw = fs.readFileSync(USERS_FILE, 'utf8');
       const parsed = JSON.parse(raw || '{}');
       if (Array.isArray(parsed.users) && parsed.users.length > 0) {
+        // forțăm images[] + background
+        let mutated = false;
+        for (const u of parsed.users) {
+          if (!u.preferences || !u.preferences.background) {
+            u.preferences = u.preferences || {};
+            u.preferences.background = Object.assign({}, DEFAULT_BACKGROUND);
+            mutated = true;
+          }
+          if (!Array.isArray(u.images)) {
+            u.images = [];
+            mutated = true;
+          }
+        }
+        if (mutated) {
+          fs.writeFileSync(USERS_FILE, JSON.stringify(parsed, null, 2), 'utf8');
+        }
         return null;
       }
-      // else continue to create admin
     } catch (e) {
-      // fall through to create default admin
+      // corupt -> mergem mai departe și creăm admin
     }
   }
 
-  // Need to create admin user
+  // nu avem useri -> creăm admin
   const username = 'admin';
   let adminPassPlain = null;
 
-  // If we have a TTY, prompt for password (with confirmation). If no TTY, create random and print.
   if (process.stdin.isTTY && process.stdout.isTTY) {
     process.stdout.write('\nNo users found. Creating default admin user.\n');
-    // prompt loop up to 3 attempts
     for (let attempt = 0; attempt < 3; attempt++) {
       const p1 = (await promptHidden('Enter password for admin (input hidden): ')) || '';
       process.stdout.write('\n');
@@ -199,26 +229,76 @@ async function ensureDataAndAdminSync() {
       initialAdminPasswordPlain = adminPassPlain;
     }
   } else {
-    // Non-interactive environment: generate random password and show it (so admin can copy it once)
     adminPassPlain = randHex(8);
     initialAdminPasswordPlain = adminPassPlain;
     console.log('\nNo TTY detected: generated admin password (one-time display):', adminPassPlain, '\n');
   }
 
   const hash = bcrypt.hashSync(adminPassPlain, 10);
+
   const defaultUser = {
     username: username,
     password_hash: hash,
     email: 'admin@example.com',
-    created_at: Date.now()
+    created_at: Date.now(),
+    role: 'admin',
+    preferences: { background: Object.assign({}, DEFAULT_BACKGROUND) },
+    images: [] // <- IMPORTANT, fiecare user are propriile imagini
   };
 
-  // Write users JSON (simple structure)
   fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [defaultUser] }, null, 2), 'utf8');
   return adminPassPlain;
 }
 
-// Update UPLOAD_TOKEN_HASH in .env (called when admin changes token in Settings)
+// găsește user după email (case-insensitive)
+function findUserByEmail(emailCandidate) {
+  if (!emailCandidate) return null;
+  const lower = String(emailCandidate).trim().toLowerCase();
+  if (!lower) return null;
+  const all = listUsers();
+  for (const u of all) {
+    if (u && u.email && u.email.toLowerCase() === lower) {
+      return u;
+    }
+  }
+  return null;
+}
+
+// ===================== settings.json bootstrap pentru register lock =====================
+function ensureSettingsFile() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    if (!fs.existsSync(SETTINGS_FILE)) {
+      const defaults = { registerBlocked: false };
+      fs.writeFileSync(SETTINGS_FILE, JSON.stringify(defaults, null, 2), 'utf8');
+      registerBlocked = defaults.registerBlocked;
+      return;
+    }
+    const raw = fs.readFileSync(SETTINGS_FILE, 'utf8') || '{}';
+    const json = JSON.parse(raw);
+    registerBlocked = !!json.registerBlocked;
+  } catch (err) {
+    console.error('Failed to init settings.json, defaulting registerBlocked=false', err);
+    registerBlocked = false;
+  }
+}
+function saveSettings() {
+  try {
+    const obj = { registerBlocked: !!registerBlocked };
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(obj, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to save settings.json', err);
+  }
+}
+function getRegisterBlocked() {
+  return !!registerBlocked;
+}
+function setRegisterBlocked(val) {
+  registerBlocked = !!val;
+  saveSettings();
+}
+
+// ===================== helpers env update =====================
 function setUploadTokenHashInEnv(newHash) {
   let raw = '';
   if (fs.existsSync(ENV_PATH)) raw = fs.readFileSync(ENV_PATH, 'utf8');
@@ -244,24 +324,43 @@ function setUploadTokenHashInEnv(newHash) {
     `SESSION_SECRET=${kv.SESSION_SECRET}`,
     `UPLOAD_TOKEN_HASH=${kv.UPLOAD_TOKEN_HASH}`
   ].join('\n') + '\n';
+
   fs.writeFileSync(ENV_PATH, content, 'utf8');
   process.env.UPLOAD_TOKEN_HASH = kv.UPLOAD_TOKEN_HASH;
 }
 
-// Start server after initialization
+// ===================== helperi IMAGINI PER USER =====================
+
+// adaugă obiect imagine în user.images
+function addImageRecordForUser(username, imgObj) {
+  const user = findUser(username);
+  if (!user) return false;
+  const arr = Array.isArray(user.images) ? [...user.images] : [];
+  arr.push(imgObj);
+  return updateUser(username, { images: arr });
+}
+
+// scoate imaginea din user.images după id
+function removeImageRecordForUser(username, imageId) {
+  const user = findUser(username);
+  if (!user) return false;
+  const arr = Array.isArray(user.images)
+    ? user.images.filter(i => i && i.id !== imageId)
+    : [];
+  return updateUser(username, { images: arr });
+}
+
+// ===================== init + server start =====================
 async function init() {
   try {
-    // 1) ensure .env and capture token if created now
-    const maybeToken = ensureEnv(); // may set initialUploadTokenPlain
-    // 2) ensure users file and default admin creation (interactive if possible)
-    await ensureDataAndAdminSync(); // sets initialAdminPasswordPlain if fallback
-
-    // reload env to be safe
+    const maybeToken = ensureEnv();
+    await ensureDataAndAdminSync();
+    ensureSettingsFile(); // load registerBlocked
     require('dotenv').config();
 
-    // read config from env
     const PORT = parseInt(process.env.PORT || DEFAULTS.PORT, 10);
     const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || DEFAULTS.UPLOAD_DIR);
+    const BACKGROUND_DIR = path.join(UPLOAD_DIR, 'backgrounds');
     const MAX_UPLOAD_BYTES = parseInt(process.env.MAX_UPLOAD_BYTES || DEFAULTS.MAX_UPLOAD_BYTES, 10);
     const RATE_LIMIT_TOKENS = parseInt(process.env.RATE_LIMIT_TOKENS || DEFAULTS.RATE_LIMIT_TOKENS, 10);
     const RATE_LIMIT_REFILL = parseFloat(process.env.RATE_LIMIT_REFILL || DEFAULTS.RATE_LIMIT_REFILL, 10);
@@ -273,14 +372,16 @@ async function init() {
       process.exit(1);
     }
 
-    // create uploads dir
     if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    if (!fs.existsSync(BACKGROUND_DIR)) fs.mkdirSync(BACKGROUND_DIR, { recursive: true });
 
-    // Multer
+    // multer config pentru imagini normale
     const storage = multer.diskStorage({
       destination: (req, file, cb) => cb(null, UPLOAD_DIR),
       filename: (req, file, cb) => {
-        const safe = (file.originalname || 'file').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        const safe = (file.originalname || 'file')
+          .replace(/\s+/g, '_')
+          .replace(/[^a-zA-Z0-9.\-_]/g, '_');
         cb(null, `${Date.now()}-${uuidv4()}-${safe}`);
       }
     });
@@ -290,44 +391,94 @@ async function init() {
       }
       cb(null, true);
     };
-    const upload = multer({ storage, fileFilter, limits: { fileSize: MAX_UPLOAD_BYTES } });
+    const upload = multer({
+      storage,
+      fileFilter,
+      limits: { fileSize: MAX_UPLOAD_BYTES }
+    });
+
+    // multer pentru background-uri custom
+    const backgroundStorage = multer.diskStorage({
+      destination: (req, file, cb) => cb(null, BACKGROUND_DIR),
+      filename: (req, file, cb) => {
+        const safe = (file.originalname || 'background')
+          .replace(/\s+/g, '_')
+          .replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        cb(null, `${Date.now()}-${uuidv4()}-${safe}`);
+      }
+    });
+    const backgroundUpload = multer({
+      storage: backgroundStorage,
+      fileFilter,
+      limits: { fileSize: 5 * 1024 * 1024 }
+    });
 
     const app = express();
     app.use(express.json({ limit: '1mb' }));
     app.use(cookieParser());
-    app.use('/public', express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
 
-    // rate limiter in-memory
+    // ===================== PUBLIC ROUTES (register) =====================
+    app.get('/register.html', (req, res) => res.sendStatus(404));
+
+    app.get('/register', (req, res) => {
+      if (getRegisterBlocked()) return res.sendStatus(403);
+      return res.sendFile(path.join(PUBLIC_DIR, 'register.html'));
+    });
+
+    // static public files
+    app.use(express.static(PUBLIC_DIR, { maxAge: '1d' }));
+    app.use('/public', express.static(PUBLIC_DIR, { maxAge: '1d' }));
+    app.use('/backgrounds', express.static(BACKGROUND_DIR, { maxAge: '7d' }));
+
+    // ===================== RATE LIMIT (upload public token) =====================
     const rateBuckets = new Map();
     function allowRate(ip) {
       let b = rateBuckets.get(ip);
       const now = Date.now() / 1000;
-      if (!b) { b = { tokens: RATE_LIMIT_TOKENS, last: now }; rateBuckets.set(ip, b); }
+      if (!b) {
+        b = { tokens: DEFAULTS.RATE_LIMIT_TOKENS, last: now };
+        rateBuckets.set(ip, b);
+      }
       const elapsed = Math.max(0, now - b.last);
-      b.tokens = Math.min(RATE_LIMIT_TOKENS, b.tokens + elapsed * RATE_LIMIT_REFILL);
+      b.tokens = Math.min(
+        DEFAULTS.RATE_LIMIT_TOKENS,
+        b.tokens + elapsed * DEFAULTS.RATE_LIMIT_REFILL
+      );
       b.last = now;
-      if (b.tokens >= 1) { b.tokens -= 1; return true; }
+      if (b.tokens >= 1) {
+        b.tokens -= 1;
+        return true;
+      }
       return false;
     }
 
-    // Session cookie signing
+    // ===================== SESSIUNE CUSTOM =====================
     function signSession(username, ts) {
       const payload = `${username}.${ts}`;
-      const hmac = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('hex');
+      const hmac = crypto.createHmac('sha256', SESSION_SECRET)
+        .update(payload)
+        .digest('hex');
       return `${payload}.${hmac}`;
     }
+
     function verifySessionCookie(cookieValue) {
       if (!cookieValue) return null;
       const parts = cookieValue.split('.');
       if (parts.length < 3) return null;
-      // last part is hmac, second last is timestamp, rest is username (to allow dots in username)
       const providedHmac = parts.pop();
       const ts = parts.pop();
       const username = parts.join('.');
-      const expected = crypto.createHmac('sha256', SESSION_SECRET).update(`${username}.${ts}`).digest('hex');
+      const expected = crypto.createHmac('sha256', SESSION_SECRET)
+        .update(`${username}.${ts}`)
+        .digest('hex');
       try {
-        if (!crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(providedHmac, 'hex'))) return null;
-      } catch (e) { return null; }
+        if (!crypto.timingSafeEqual(
+          Buffer.from(expected, 'hex'),
+          Buffer.from(providedHmac, 'hex')
+        )) return null;
+      } catch (e) {
+        return null;
+      }
       const tsNum = parseInt(ts, 10);
       if (isNaN(tsNum)) return null;
       const age = Date.now() - tsNum;
@@ -345,9 +496,10 @@ async function init() {
       return null;
     }
 
-    // verify upload token
+    // ===================== UPLOAD TOKEN VALIDARE =====================
     function verifyUploadToken(candidate) {
       if (!candidate) return false;
+      // acceptăm tokenul generat la boot (prima dată) sau orice token care matchează hashul
       if (initialUploadTokenPlain && candidate === initialUploadTokenPlain) return true;
       try {
         return bcrypt.compareSync(candidate, UPLOAD_TOKEN_HASH);
@@ -356,13 +508,12 @@ async function init() {
       }
     }
 
-    // helper: set new upload token hash persistently
     function persistNewUploadTokenHash(newHash) {
       setUploadTokenHashInEnv(newHash);
       UPLOAD_TOKEN_HASH = newHash;
     }
 
-    // helpers
+    // common helpers
     function getOrigin(req) {
       const proto = req.headers['x-forwarded-proto'] || req.protocol;
       const host = req.headers['x-forwarded-host'] || req.headers['host'];
@@ -372,45 +523,150 @@ async function init() {
       return res.status(status).json({ success: false, error: msg });
     }
 
-    // Routes
+    // ===================== BACKGROUND PREFERENCES =====================
+    function normalizeBackgroundPref(pref) {
+      if (!pref || typeof pref !== 'object') {
+        return Object.assign({}, DEFAULT_BACKGROUND);
+      }
+      const type = pref.type;
+      const value = typeof pref.value === 'string' ? pref.value.trim() : '';
 
+      if (type === 'color') {
+        if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(value)) {
+          return { type: 'color', value: value.toLowerCase() };
+        }
+        return Object.assign({}, DEFAULT_BACKGROUND);
+      }
+
+      if (type === 'template') {
+        if (TEMPLATE_BACKGROUNDS.includes(value)) {
+          return { type: 'template', value };
+        }
+        return Object.assign({}, DEFAULT_BACKGROUND);
+      }
+
+      if (type === 'image') {
+        if (value.startsWith('/backgrounds/')) {
+          return { type: 'image', value };
+        }
+        return Object.assign({}, DEFAULT_BACKGROUND);
+      }
+
+      return Object.assign({}, DEFAULT_BACKGROUND);
+    }
+
+    function getBackgroundPreference(user) {
+      return normalizeBackgroundPref(
+        user && user.preferences && user.preferences.background || DEFAULT_BACKGROUND
+      );
+    }
+
+    function setBackgroundPreference(username, pref) {
+      const sanitized = normalizeBackgroundPref(pref);
+      const user = findUser(username);
+      if (!user) return false;
+      const prefs = Object.assign({}, user.preferences || {});
+      prefs.background = sanitized;
+      const ok = updateUser(username, { preferences: prefs });
+      return ok ? sanitized : false;
+    }
+
+    function escapeCssUrl(value) {
+      return String(value || '').replace(/'/g, "\\'");
+    }
+
+    async function rewriteDashboardBackground(pref) {
+      if (!pref) return;
+      try {
+        const html = await fsp.readFile(DASHBOARD_HTML_PATH, 'utf8');
+        let next = html;
+
+        // încercăm să prindem niște CSS inline (best effort)
+        const varPattern = /(--bg:\s*)([^;]+)(;)/;
+        const bodyPattern = /(body\s*\{[^}]*?background:\s*)([^;]+)(;)/;
+
+        const colorValue = pref.type === 'color'
+          ? pref.value
+          : DEFAULT_BACKGROUND.value;
+
+        const backgroundValue = pref.type === 'color'
+          ? pref.value
+          : `url('${escapeCssUrl(pref.value)}') center/cover no-repeat fixed`;
+
+        if (varPattern.test(next)) {
+          next = next.replace(varPattern, `$1${colorValue}$3`);
+        }
+
+        if (bodyPattern.test(next)) {
+          next = next.replace(bodyPattern, `$1${backgroundValue}$3`);
+        }
+
+        if (next !== html) {
+          await fsp.writeFile(DASHBOARD_HTML_PATH, next, 'utf8');
+        }
+      } catch (err) {
+        console.error('Failed to rewrite dashboard background', err);
+      }
+    }
+
+    // ce trimitem la client ca profil
+    function userForClient(user) {
+      if (!user) return null;
+      return {
+        username: user.username,
+        email: user.email || '',
+        created_at: user.created_at,
+        role: user.role || (user.username === 'admin' ? 'admin' : 'user'),
+        backgroundPreference: getBackgroundPreference(user)
+        // nu trimitem lista de imagini aici; dashboard le ia din /api/images
+      };
+    }
+
+    // ===================== BASIC PAGES =====================
     app.get('/', (req, res) => {
       try {
         const username = checkAuthFromReq(req);
-        if (username) return res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-        return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+        if (username) return res.sendFile(path.join(PUBLIC_DIR, 'dashboard.html'));
+        return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
       } catch (err) {
         console.error('Error serving /', err);
         return jsonError(res, 500, 'Internal server error');
       }
     });
 
+    app.get('/settings', (req, res) => {
+      try {
+        const username = checkAuthFromReq(req);
+        if (!username) return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
+        return res.sendFile(path.join(PUBLIC_DIR, 'settings.html'));
+      } catch (err) {
+        console.error('Error serving /settings', err);
+        return jsonError(res, 500, 'Internal server error');
+      }
+    });
+
     app.get('/healthz', (req, res) => res.json({ ok: true }));
 
-    // View page for Discord/OG embedding: green background and OG tags
+    // ===================== PUBLIC IMAGE VIEW / OG =====================
     app.get('/i/:filename/view', async (req, res) => {
       try {
         const filename = req.params.filename;
         const filePath = path.join(UPLOAD_DIR, filename);
-        // Prevent path traversal
-        if (path.relative(UPLOAD_DIR, filePath).startsWith('..')) return jsonError(res, 400, 'Invalid filename');
-        // ensure file exists
+        if (path.relative(UPLOAD_DIR, filePath).startsWith('..')) {
+          return jsonError(res, 400, 'Invalid filename');
+        }
         await fsp.access(filePath, fs.constants.R_OK);
         const origin = getOrigin(req);
         const imageUrl = `${origin}/i/${encodeURIComponent(filename)}`;
         const pageUrl = `${origin}/i/${encodeURIComponent(filename)}/view`;
         const imageTitle = path.basename(filename);
 
-
-        // Minimal HTML with green background and OG tags for Discord
         const html = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Image view</title>
-
-  <!-- Open Graph for Discord and social previews -->
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="ADEdge">
   <meta property="og:title" content="${escapeHtml(imageTitle)}">
@@ -419,7 +675,6 @@ async function init() {
   <meta property="og:image" content="${escapeHtml(imageUrl)}">
   <meta property="og:image:alt" content="Shared image">
   <meta name="twitter:card" content="summary_large_image">
-
   <style>
     html,body{height:100%;margin:0}
     body{display:flex;align-items:center;justify-content:center;background:#0f9d58;color:#0a0a0a;font-family:Arial,Helvetica,sans-serif}
@@ -436,9 +691,7 @@ async function init() {
 </body>
 </html>`;
 
-        // Serve HTML; let Discord fetch OG tags
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
-        // Very small cache to reduce repeated hits, but allow re-fetch if changed
         res.setHeader('Cache-Control', 'public, max-age=60');
         return res.status(200).send(html);
       } catch (err) {
@@ -446,12 +699,13 @@ async function init() {
       }
     });
 
-    // Serve raw image
     app.get('/i/:filename', async (req, res) => {
       try {
         const filename = req.params.filename;
         const filePath = path.join(UPLOAD_DIR, filename);
-        if (path.relative(UPLOAD_DIR, filePath).startsWith('..')) return jsonError(res, 400, 'Invalid filename');
+        if (path.relative(UPLOAD_DIR, filePath).startsWith('..')) {
+          return jsonError(res, 400, 'Invalid filename');
+        }
         await fsp.access(filePath, fs.constants.R_OK);
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
         return res.sendFile(filePath);
@@ -460,37 +714,92 @@ async function init() {
       }
     });
 
-    // Upload endpoint (ShareX)
+    // helper intern: construiește metadatele imaginii și le atașează la user (dacă există)
+    async function finalizeUploadAndRespond(req, res, originalName, sizeBytes, filename) {
+      try {
+        const origin = getOrigin(req);
+        const url = `${origin}/i/${encodeURIComponent(filename)}`;
+        const id = uuidv4();
+
+        // aflăm userul eventual, din headerul ShareX
+        const emailHeader = req.headers['x-user-email'] || req.headers['x-useremail'] || req.headers['x-user_email'] || '';
+        const ownerUser = findUserByEmail(emailHeader);
+
+        const meta = {
+          id,
+          filename,
+          originalname: originalName,
+          size: sizeBytes,
+          url,
+          uploaded_at: Date.now(),
+          owner: ownerUser ? ownerUser.username : null
+        };
+
+        // adăugăm în images global
+        addImage(meta);
+
+        // dacă am găsit user după email, îi adăugăm poza la user.images
+        if (ownerUser && ownerUser.username) {
+          addImageRecordForUser(ownerUser.username, meta);
+        }
+
+        return res.json({
+          success: true,
+          url,
+          delete_url: `${origin}/api/images/${id}`
+        });
+      } catch (err) {
+        console.error('finalizeUploadAndRespond error:', err);
+        return jsonError(res, 500, 'Internal server error');
+      }
+    }
+
+    // ===================== PUBLIC /upload (ShareX token) =====================
+    // Upload folosit de ShareX: Authorization Bearer <token> + X-User-Email <email-ul-userului>
+    // Ca să știm cui să atribuim poza.
     app.post('/upload', async (req, res) => {
       try {
         const ip = req.ip || req.connection.remoteAddress || 'unknown';
         if (!allowRate(ip)) return jsonError(res, 429, 'Too many requests');
 
         const auth = (req.headers['authorization'] || '');
-        if (!auth.startsWith('Bearer ')) return jsonError(res, 401, 'Missing Authorization header');
+        if (!auth.startsWith('Bearer ')) {
+          return jsonError(res, 401, 'Missing Authorization header');
+        }
         const tokenCandidate = auth.slice(7).trim();
-        if (!verifyUploadToken(tokenCandidate)) return jsonError(res, 401, 'Invalid upload token');
+        if (!verifyUploadToken(tokenCandidate)) {
+          return jsonError(res, 401, 'Invalid upload token');
+        }
 
         const contentType = (req.headers['content-type'] || '').toLowerCase();
 
+        // multipart/form-data (ShareX FileFormName=file)
         if (contentType.startsWith('multipart/form-data')) {
-          return upload.single('file')(req, res, function (err) {
-            if (err) { console.error('multer error:', err); return jsonError(res, 400, err.message || 'Upload error'); }
+          return upload.single('file')(req, res, async function (err) {
+            if (err) {
+              console.error('multer error:', err);
+              return jsonError(res, 400, err.message || 'Upload error');
+            }
             if (!req.file) return jsonError(res, 400, 'No file provided (field name: file)');
-            const filename = req.file.filename;
-            // Note: we return the raw image URL here; the generated .sxcu will append /view when configured
-            const url = `${getOrigin(req)}/i/${encodeURIComponent(filename)}`;
-            const id = uuidv4();
-            addImage({ id, filename, originalname: req.file.originalname, size: req.file.size, url, uploaded_at: Date.now() });
-            return res.json({ success: true, url, delete_url: `${getOrigin(req)}/api/images/${id}` });
+
+            // finalize => bagă meta în DB global și în user.images (după email header)
+            return finalizeUploadAndRespond(
+              req,
+              res,
+              req.file.originalname,
+              req.file.size,
+              req.file.filename
+            );
           });
         }
 
-        // binary raw upload
+        // raw/binary
         const maxBytes = MAX_UPLOAD_BYTES;
         let totalBytes = 0;
         const filenameHeader = req.headers['x-filename'] || `${Date.now()}.png`;
-        const safe = String(filenameHeader).replace(/\s+/g, '_').replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        const safe = String(filenameHeader)
+          .replace(/\s+/g, '_')
+          .replace(/[^a-zA-Z0-9.\-_]/g, '_');
         const filename = `${Date.now()}-${uuidv4()}-${safe}`;
         const filepath = path.join(UPLOAD_DIR, filename);
         const writeStream = fs.createWriteStream(filepath, { flags: 'wx' });
@@ -506,33 +815,42 @@ async function init() {
         try {
           await pipeline(req, counter, writeStream);
         } catch (err) {
-          try { await fsp.unlink(filepath); } catch (e) {}
+          try { await fsp.unlink(filepath); } catch (_) {}
           console.error('Binary upload failed:', err.message || err);
-          return jsonError(res, err.message === 'File too large' ? 413 : 400, err.message || 'Upload error');
+          return jsonError(
+            res,
+            err.message === 'File too large' ? 413 : 400,
+            err.message || 'Upload error'
+          );
         }
 
-        const url = `${getOrigin(req)}/i/${encodeURIComponent(filename)}`;
-        const id = uuidv4();
-        addImage({ id, filename, originalname: filenameHeader, size: totalBytes, url, uploaded_at: Date.now() });
-        return res.json({ success: true, url, delete_url: `${getOrigin(req)}/api/images/${id}` });
-
+        return finalizeUploadAndRespond(
+          req,
+          res,
+          filenameHeader,
+          totalBytes,
+          filename
+        );
       } catch (err) {
         console.error('Unexpected upload error:', err);
         return jsonError(res, 500, 'Internal server error');
       }
     });
 
-    // Dashboard login (username/password)
+    // ===================== LOGIN / LOGOUT =====================
     app.post('/api/login', async (req, res) => {
       const { username, password } = req.body || {};
-      if (!username || !password) return jsonError(res, 400, 'username and password required');
+      if (!username || !password) {
+        return jsonError(res, 400, 'username and password required');
+      }
       const user = findUser(username);
       if (!user) return jsonError(res, 401, 'Invalid credentials');
+
       const ok = await bcrypt.compare(password, user.password_hash);
       if (!ok) return jsonError(res, 401, 'Invalid credentials');
+
       const ts = Date.now();
       const cookieVal = signSession(username, ts);
-      // set cookie with explicit path and maxAge; secure only in production
       res.cookie('session', cookieVal, {
         httpOnly: true,
         sameSite: 'lax',
@@ -540,121 +858,529 @@ async function init() {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         secure: (process.env.NODE_ENV === 'production')
       });
-      return res.json({ success: true, username: user.username, email: user.email });
+
+      return res.json({
+        success: true,
+        username: user.username,
+        email: user.email
+      });
     });
 
-    // Logout
     app.post('/api/logout', (req, res) => {
       res.clearCookie('session');
       return res.json({ success: true });
     });
 
-    // Me
-    app.get('/api/me', (req, res) => {
-      const username = checkAuthFromReq(req);
-      if (!username) return jsonError(res, 401, 'Unauthorized');
-      const user = findUser(username);
-      if (!user) return jsonError(res, 404, 'User not found');
-      return res.json({ success: true, username: user.username, email: user.email, created_at: user.created_at });
+        // ===================== PUBLIC REGISTER (CREATE ACCOUNT) =====================
+    // POST /registeryouraccount/register
+    // Body JSON:
+    // {
+    //   "username": "anton.edge",
+    //   "email": "anton@example.com",
+    //   "password": "parola123"
+    // }
+    //
+    // - respectă registerBlocked (dacă ai blocat register-ul din settings)
+    // - verifică dacă username sau email există deja
+    // - salvează userul nou în users.json cu bcrypt hash
+    app.post('/registeryouraccount/register', async (req, res) => {
+      try {
+        // dacă adminul a blocat înregistrările noi
+        if (getRegisterBlocked && getRegisterBlocked()) {
+          return res.status(403).json({
+            error: 'Registration is currently disabled.'
+          });
+        }
+
+        const { username, email, password } = req.body || {};
+
+        // validări de bază
+        if (
+          !username || typeof username !== 'string' || !username.trim() ||
+          !email    || typeof email    !== 'string' || !email.trim() ||
+          !password || typeof password !== 'string' || !password
+        ) {
+          return res.status(400).json({
+            error: 'Missing username, email or password.'
+          });
+        }
+
+        const cleanUsername = username.trim();
+        const cleanEmail = email.trim();
+
+        // optional: reguli simple, poți face mai strict dacă vrei
+        if (!/^[a-zA-Z0-9._-]{3,32}$/.test(cleanUsername)) {
+          return res.status(400).json({
+            error: 'Username must be 3-32 chars (letters / numbers / . _ - ).'
+          });
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(cleanEmail)) {
+          return res.status(400).json({
+            error: 'Invalid email format.'
+          });
+        }
+        if (password.length < 6) {
+          return res.status(400).json({
+            error: 'Password must be at least 6 characters.'
+          });
+        }
+
+        // verifică dacă există deja username-ul
+        const existingUser = findUser(cleanUsername);
+        if (existingUser) {
+          return res.status(409).json({
+            error: 'Username already exists.'
+          });
+        }
+
+        // verifică dacă emailul e deja luat de alt user
+        const allUsers = listUsers();
+        const emailTaken = allUsers.some(u =>
+          u &&
+          u.email &&
+          u.email.toLowerCase() === cleanEmail.toLowerCase()
+        );
+        if (emailTaken) {
+          return res.status(409).json({
+            error: 'Email already exists.'
+          });
+        }
+
+        // hash parola
+        const password_hash = await bcrypt.hash(password, 10);
+
+        // creează userul nou
+        createUser({
+          username: cleanUsername,
+          email: cleanEmail,
+          password_hash,
+          created_at: Date.now(),
+          role: 'user',
+          preferences: { background: Object.assign({}, DEFAULT_BACKGROUND) },
+          images: [] // user nou începe cu lista goală
+        });
+
+        // răspuns final
+        return res.status(201).json({
+          ok: true,
+          message: 'User created.',
+          user: {
+            username: cleanUsername,
+            email: cleanEmail,
+            role: 'user'
+          }
+        });
+      } catch (err) {
+        console.error('Public register error:', err);
+        return res.status(500).json({
+          error: 'Internal server error.'
+        });
+      }
     });
 
-    // Settings: change email/password and optionally set new upload token
-    app.post('/api/settings', async (req, res) => {
+    // ===================== PROFILE CURRENT USER =====================
+    function handleAccountMe(req, res) {
       const username = checkAuthFromReq(req);
       if (!username) return jsonError(res, 401, 'Unauthorized');
-      const { email, currentPassword, newPassword, newUploadToken } = req.body || {};
+      const user = findUser(username);
+      if (!user) return jsonError(res, 404, 'User not found');
+      return res.json({ success: true, user: userForClient(user) });
+    }
+    app.get('/api/me', handleAccountMe);
+    app.get('/api/account/me', handleAccountMe);
+
+    // ===================== ACCOUNT SETTINGS (PASSWORD / UPLOAD TOKEN) =====================
+    async function handleAccountSettings(req, res) {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+
+      const {
+        currentPassword,
+        newPassword,
+        newUploadToken
+      } = req.body || {};
+
       const user = findUser(username);
       if (!user) return jsonError(res, 404, 'User not found');
 
+      // schimbare parolă
       if (newPassword) {
-        if (!currentPassword) return jsonError(res, 400, 'currentPassword required to change password');
+        if (!currentPassword) {
+          return jsonError(res, 400, 'currentPassword required to change password');
+        }
         const ok = await bcrypt.compare(currentPassword, user.password_hash);
         if (!ok) return jsonError(res, 401, 'Current password incorrect');
+
+        if (newPassword.length < 6) {
+          return jsonError(res, 400, 'Password must be at least 6 characters');
+        }
+
         const newHash = await bcrypt.hash(newPassword, 10);
-        updateUser(username, { password_hash: newHash, email: email || user.email });
-      } else if (email) {
-        updateUser(username, { email });
+        updateUser(username, { password_hash: newHash });
       }
 
+      // schimbare upload token (pt ShareX/public /upload)
       if (newUploadToken) {
-        if (!currentPassword) return jsonError(res, 400, 'currentPassword required to change upload token');
+        if (!currentPassword) {
+          return jsonError(res, 400, 'currentPassword required to change upload token');
+        }
         const ok2 = await bcrypt.compare(currentPassword, user.password_hash);
-        if (!ok2) return jsonError(res, 401, 'Current password incorrect (for upload token change)');
+        if (!ok2) {
+          return jsonError(res, 401, 'Current password incorrect (for upload token change)');
+        }
+        if (newUploadToken.length < 6) {
+          return jsonError(res, 400, 'Upload token must be at least 6 chars');
+        }
+
         const newTokenHash = await bcrypt.hash(newUploadToken, 10);
         persistNewUploadTokenHash(newTokenHash);
-        // set in-memory plaintext so .sxcu generation in same runtime can embed it
+
+        // facem tokenul nou disponibil imediat pentru sesiunea asta
         initialUploadTokenPlain = newUploadToken;
       }
 
       return res.json({ success: true, message: 'Settings updated' });
-    });
+    }
 
-    // Images list (dashboard)
-    app.get('/api/images', (req, res) => {
+    app.post('/api/settings', handleAccountSettings);
+    app.post('/api/account/settings', handleAccountSettings);
+
+    // ===================== EMAIL UPDATE =====================
+    app.post('/api/account/email', (req, res) => {
       const username = checkAuthFromReq(req);
       if (!username) return jsonError(res, 401, 'Unauthorized');
-      const images = listImages();
-      return res.json({ success: true, images });
-    });
 
-    // Upload from dashboard
-    app.post('/api/upload', (req, res) => {
-      const username = checkAuthFromReq(req);
-      if (!username) return jsonError(res, 401, 'Unauthorized');
-      return upload.single('file')(req, res, function (err) {
-        if (err) { console.error('multer api/upload err', err); return jsonError(res, 400, err.message || 'Upload error'); }
-        if (!req.file) return jsonError(res, 400, 'No file');
-        const filename = req.file.filename;
-        const url = `${getOrigin(req)}/i/${encodeURIComponent(filename)}`;
-        const id = uuidv4();
-        addImage({ id, filename, originalname: req.file.originalname, size: req.file.size, url, uploaded_at: Date.now() });
-        return res.json({ success: true, url });
+      const newEmailRaw = (req.body && req.body.email || '').trim();
+      if (!newEmailRaw) {
+        return jsonError(res, 400, 'Email required');
+      }
+
+      // format email simplu
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(newEmailRaw)) {
+        return jsonError(res, 400, 'Invalid email format');
+      }
+
+      const newEmailLower = newEmailRaw.toLowerCase();
+
+      // e deja folosit de alt user?
+      const allUsers = listUsers();
+      const conflict = allUsers.some(u =>
+        u &&
+        u.username !== username &&
+        u.email &&
+        u.email.toLowerCase() === newEmailLower
+      );
+      if (conflict) {
+        return jsonError(res, 409, 'Email already in use');
+      }
+
+      // update pentru userul curent
+      const ok = updateUser(username, { email: newEmailRaw });
+      if (!ok) {
+        return jsonError(res, 404, 'User not found');
+      }
+
+      return res.json({
+        success: true,
+        email: newEmailRaw,
+        message: 'Email updated'
       });
     });
 
-    // Delete
-    app.delete('/api/images/:id', async (req, res) => {
+    // ===================== BACKGROUND (TEMPLATES, ETC) =====================
+    app.get('/api/account/background/templates', (req, res) => {
       const username = checkAuthFromReq(req);
       if (!username) return jsonError(res, 401, 'Unauthorized');
-      const id = req.params.id;
-      const images = listImages();
-      const item = images.find(i => i.id === id);
-      if (!item) return jsonError(res, 404, 'Not found');
-      const filepath = path.join(UPLOAD_DIR, item.filename);
+      return res.json({
+        success: true,
+        templates: TEMPLATE_BACKGROUNDS,
+        defaultBackground: DEFAULT_BACKGROUND
+      });
+    });
+
+    // ===================== DELETE IMAGE BY ID (compat / ShareX)
+    // NOTE: încă există pentru DeletionURL, dar dashboard NU mai folosește asta.
+    app.delete('/api/images/:id', async (req, res) => {
       try {
-        await fsp.unlink(filepath).catch(() => {});
-        const ok = removeImage(id);
-        return res.json({ success: ok });
+        const username = checkAuthFromReq(req);
+        if (!username) return jsonError(res, 401, 'Unauthorized');
+
+        const id = req.params.id;
+        if (!id) return jsonError(res, 400, 'No image id');
+
+        // găsim userul
+        const user = findUser(username);
+        if (!user) return jsonError(res, 404, 'User not found');
+
+        const imgsArr = Array.isArray(user.images) ? user.images : [];
+        const item = imgsArr.find(i => i && i.id === id);
+        if (!item) {
+          return jsonError(res, 404, 'Not found or not owned');
+        }
+
+        // ștergem fișierul fizic
+        const filepath = path.join(UPLOAD_DIR, item.filename);
+        try {
+          await fsp.unlink(filepath).catch(() => {});
+        } catch (err) {
+          console.error('unlink failed:', err);
+        }
+
+        // scoatem din DB global
+        removeImage(id);
+
+        // scoatem din user.images
+        removeImageRecordForUser(username, id);
+
+        return res.json({ success: true });
       } catch (err) {
-        console.error('Delete error:', err);
+        console.error('Delete error (by id):', err);
         return jsonError(res, 500, 'Delete failed');
       }
     });
 
-    // Generate .sxcu (embed token if generated this run or set in settings)
-    // Modified to use /view at final URL so ShareX will produce Discord-friendly links
-    app.get('/api/generate-sxcu', (req, res) => {
+    // ===================== DELETE IMAGE BY FILENAME (dashboard uses this)
+    app.delete('/api/images', async (req, res) => {
+      try {
+        const username = checkAuthFromReq(req);
+        if (!username) return jsonError(res, 401, 'Unauthorized');
+
+        const filenameRaw = req.body && req.body.filename;
+        if (!filenameRaw) {
+          return jsonError(res, 400, 'Missing filename');
+        }
+
+        // ne asigurăm că nu e path traversal
+        const safeFilename = path.basename(String(filenameRaw));
+        const filePath = path.join(UPLOAD_DIR, safeFilename);
+
+        // 1. Șterge fișierul fizic din uploads/
+        try {
+          if (!path.relative(UPLOAD_DIR, filePath).startsWith('..')) {
+            await fsp.unlink(filePath).catch(() => {});
+          }
+        } catch (err) {
+          // dacă nu există deja pe disc, nu e fatal
+          console.warn('unlink by filename failed or file missing:', err.message || err);
+        }
+
+        // 2. Curăță din images.json global
+        const allImages = listImages(); // [{id, filename, ...}, ...]
+        const toRemove = allImages.filter(img => img && img.filename === safeFilename);
+        for (const imgMeta of toRemove) {
+          if (imgMeta && imgMeta.id) {
+            removeImage(imgMeta.id);
+          }
+        }
+
+        // 3. Curăță din fiecare user.images din users.json
+        const allUsers = listUsers();
+        allUsers.forEach(u => {
+          if (!u) return;
+          const arr = Array.isArray(u.images) ? u.images : [];
+          const cleaned = arr.filter(meta => meta && meta.filename !== safeFilename);
+          if (cleaned.length !== arr.length) {
+            updateUser(u.username, { images: cleaned });
+          }
+        });
+
+        // 4. Done. Trimitem success indiferent dacă fișierul era deja șters.
+        return res.json({ success: true });
+      } catch (err) {
+        console.error('Delete error (by filename):', err);
+        return jsonError(res, 500, 'Delete failed');
+      }
+    });
+
+    // ===================== ADMIN: LIST USERS =====================
+    app.get('/api/account/users', (req, res) => {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+      if (username !== 'admin') return jsonError(res, 403, 'Admin access required');
+
+      const users = listUsers().map(userForClient);
+      return res.json({ success: true, users });
+    });
+
+    // ===================== ADMIN: CREATE USER =====================
+    app.post('/api/account/users', async (req, res) => {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+      if (username !== 'admin') return jsonError(res, 403, 'Admin access required');
+
+      const { newUsername, email, password } = req.body || {};
+      if (!newUsername || !email || !password) {
+        return jsonError(res, 400, 'newUsername, email and password required');
+      }
+
+      const trimmedUsername = newUsername.trim();
+      const trimmedEmail = email.trim();
+
+      if (!/^[a-zA-Z0-9._-]{3,32}$/.test(trimmedUsername)) {
+        return jsonError(res, 400, 'Username must be 3-32 characters');
+      }
+      if (!/^.+@.+\..+$/.test(trimmedEmail)) {
+        return jsonError(res, 400, 'Email invalid');
+      }
+      if (password.length < 6) {
+        return jsonError(res, 400, 'Password must be at least 6 characters');
+      }
+
+      const existingUser = findUser(trimmedUsername);
+      if (existingUser) {
+        return jsonError(res, 409, 'Username already exists');
+      }
+
+      const emailTaken = listUsers().some(u =>
+        (u.email || '').toLowerCase() === trimmedEmail.toLowerCase()
+      );
+      if (emailTaken) {
+        return jsonError(res, 409, 'Email already exists');
+      }
+
+      const hashed = await bcrypt.hash(password, 10);
+
+      createUser({
+        username: trimmedUsername,
+        email: trimmedEmail,
+        password_hash: hashed,
+        created_at: Date.now(),
+        role: 'user',
+        preferences: { background: Object.assign({}, DEFAULT_BACKGROUND) },
+        images: [] // noul user începe cu 0 poze
+      });
+
+      return res.json({
+        success: true,
+        user: userForClient(findUser(trimmedUsername))
+      });
+    });
+
+    // ===================== ADMIN: DELETE USER =====================
+    app.delete('/api/account/users/:username', (req, res) => {
+      const actor = checkAuthFromReq(req);
+      if (!actor) return jsonError(res, 401, 'Unauthorized');
+      if (actor !== 'admin') return jsonError(res, 403, 'Admin access required');
+
+      const target = req.params.username;
+      if (!target) return jsonError(res, 400, 'username required');
+      if (target === 'admin') {
+        return jsonError(res, 400, 'Cannot delete admin account');
+      }
+
+      const ok = deleteUser(target);
+      if (!ok) return jsonError(res, 404, 'User not found');
+      return res.json({ success: true });
+    });
+
+    // ===================== LOGGED-IN UPLOAD (dashboard form) =====================
+    // Upload cu sesiune cookie: știm userul din cookie, deci atribuim direct
+    app.get('/api/images', (req, res) => {
+      // Returnăm DOAR pozele userului curent, din users.json
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+
+      const user = findUser(username);
+      if (!user) return jsonError(res, 404, 'User not found');
+
+      const imgs = Array.isArray(user.images) ? user.images : [];
+      return res.json({ success: true, images: imgs });
+    });
+
+    app.post('/api/upload', (req, res) => {
+      // Upload manual din dashboard (cu sesiune cookie, nu ShareX)
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+
+      return upload.single('file')(req, res, function (err) {
+        if (err) {
+          console.error('multer api/upload err', err);
+          return jsonError(res, 400, err.message || 'Upload error');
+        }
+        if (!req.file) return jsonError(res, 400, 'No file');
+
+        const filename = req.file.filename;
+        const origin = getOrigin(req);
+        const url = `${origin}/i/${encodeURIComponent(filename)}`;
+        const id = uuidv4();
+        const meta = {
+          id,
+          filename,
+          originalname: req.file.originalname,
+          size: req.file.size,
+          url,
+          uploaded_at: Date.now(),
+          owner: username
+        };
+
+        // scriem în DB global imagini
+        addImage(meta);
+
+        // atașăm imaginea la userul curent în users.json
+        addImageRecordForUser(username, meta);
+
+        return res.json({ success: true, url });
+      });
+    });
+
+    // ===================== ADMIN: REGISTER LOCK =====================
+    app.get('/api/admin/register', (req, res) => {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+      if (username !== 'admin') return jsonError(res, 403, 'Admin access required');
+
+      return res.json({ blocked: getRegisterBlocked() });
+    });
+
+    app.post('/api/admin/register', (req, res) => {
+      const username = checkAuthFromReq(req);
+      if (!username) return jsonError(res, 401, 'Unauthorized');
+      if (username !== 'admin') return jsonError(res, 403, 'Admin access required');
+
+      const { blocked } = req.body || {};
+      const val = blocked === true || blocked === 'true';
+      setRegisterBlocked(val);
+      return res.json({ success: true, blocked: getRegisterBlocked() });
+    });
+
+    // ===================== GENERATE SHAREX PROFILE =====================
+    // IMPORTANT: includem și emailul userului curent în headerul X-User-Email
+    function handleGenerateSxcu(req, res) {
       const username = checkAuthFromReq(req);
       if (username === null) return jsonError(res, 401, 'Unauthorized');
 
-      const mode = (req.query.mode || 'binary').toLowerCase();
+      const modeInput = req.query.mode || req.query.type || (req.body && req.body.mode) || 'binary';
+      const mode = String(modeInput).toLowerCase();
       const origin = getOrigin(req);
 
-      // Folosim token-ul din memoria curentă sau din .env
+      // userul curent, pt email
+      const user = findUser(username);
+      const userEmail = (user && user.email) ? user.email : '';
+
+      // token pt ShareX:
+      // - dacă avem încă plaintext-ul generat la boot, îl folosim
+      // - altfel generăm unul fresh + îl hash-uim în .env
       let token;
-      if (initialUploadTokenPlain) token = initialUploadTokenPlain;
-      else if (process.env.UPLOAD_TOKEN_HASH) {
-        // În acest caz nu avem plaintext-ul, deci trebuie să generăm unul nou
+      if (initialUploadTokenPlain) {
+        token = initialUploadTokenPlain;
+      } else if (process.env.UPLOAD_TOKEN_HASH) {
         token = randHex(24);
         const newHash = bcrypt.hashSync(token, 10);
-        persistNewUploadTokenHash(newHash); // actualizează .env și memoria
+        persistNewUploadTokenHash(newHash);
         initialUploadTokenPlain = token;
         console.log(`[INFO] Generated new upload token for ShareX: ${token}`);
       } else {
         return jsonError(res, 500, 'No upload token available');
       }
 
-      const headers = { Authorization: `Bearer ${token}` };
+      // Headers pe care ShareX le va trimite la fiecare upload
+      // => serverul va putea mapa screenshotul la user prin X-User-Email
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        'X-User-Email': userEmail
+      };
 
       const base = {
         Version: "13.5.0",
@@ -665,9 +1391,9 @@ async function init() {
         Headers: headers
       };
 
-      // Important: instruct ShareX to use the returned "url" and append /view so that Discord reads OG tags.
       let obj;
       if (mode === 'multipart') {
+        // Multipart: ShareX va trimite form-data cu "file", plus headere cu token + email
         obj = Object.assign({}, base, {
           Body: "MultipartFormData",
           Arguments: { file: null },
@@ -676,6 +1402,8 @@ async function init() {
           DeletionURL: "$json:delete_url$"
         });
       } else {
+        // Binary: ShareX trimite pur binar în body,
+        // dar headerele includ Authorization + X-User-Email.
         obj = Object.assign({}, base, {
           Body: "Binary",
           FileFormName: "",
@@ -687,29 +1415,42 @@ async function init() {
       res.setHeader('Content-disposition', `attachment; filename=ShareX-${mode}.sxcu`);
       res.setHeader('Content-Type', 'application/json');
       return res.send(JSON.stringify(obj, null, 2));
-    });
+    }
 
-    // Fallback: serve login/dashboard pages
+    app.get('/api/generate-sxcu', handleGenerateSxcu);
+    app.post('/api/generate-sxcu', handleGenerateSxcu);
+
+    // ===================== FALLBACK ROUTE =====================
     app.use((req, res, next) => {
-      if (req.path.startsWith('/api') || req.path.startsWith('/upload') || req.path.startsWith('/i')) {
+      if (
+        req.path.startsWith('/api') ||
+        req.path.startsWith('/upload') ||
+        req.path.startsWith('/i')
+      ) {
         return jsonError(res, 404, 'Not found');
       }
+
+      // dacă ești logat -> dashboard, altfel -> login
       const username = checkAuthFromReq(req);
-      if (username) return res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
-      return res.sendFile(path.join(__dirname, 'public', 'login.html'));
+      if (username) {
+        return res.sendFile(path.join(PUBLIC_DIR, 'dashboard.html'));
+      }
+      return res.sendFile(path.join(PUBLIC_DIR, 'login.html'));
     });
 
-    // Global error handler
+    // ===================== GLOBAL ERROR HANDLER =====================
     app.use((err, req, res, next) => {
       console.error('Unhandled error:', err);
       if (res.headersSent) return next(err);
       return jsonError(res, 500, 'Internal server error');
     });
 
-    // Start server
+    // ===================== START SERVER =====================
     const server = app.listen(PORT, () => {
       console.log(`Server pornit: http://localhost:${PORT}`);
       console.log(`Uploads dir: ${UPLOAD_DIR}`);
+      console.log(`Registration lock: ${getRegisterBlocked() ? 'BLOCKED' : 'OPEN'}`);
+
       if (initialUploadTokenPlain) {
         console.log('===================================================================');
         console.log('FIRST RUN: a UPLOAD TOKEN was generated automatically (one-time). Copy it now:');
@@ -718,6 +1459,7 @@ async function init() {
       } else {
         console.log('If you need an upload token, set it via Settings -> Set new Upload Token.');
       }
+
       if (initialAdminPasswordPlain) {
         console.log('===================================================================');
         console.log('FIRST RUN: default admin created. Username: admin');
@@ -730,11 +1472,17 @@ async function init() {
       }
     });
 
-    // Graceful shutdown
+    // graceful shutdown
     function graceful(signal) {
       console.log(`Received ${signal}, shutting down...`);
-      server.close(() => { console.log('HTTP server closed'); process.exit(0); });
-      setTimeout(() => { console.warn('Force exit'); process.exit(1); }, 10000).unref();
+      server.close(() => {
+        console.log('HTTP server closed');
+        process.exit(0);
+      });
+      setTimeout(() => {
+        console.warn('Force exit');
+        process.exit(1);
+      }, 10000).unref();
     }
     process.on('SIGINT', () => graceful('SIGINT'));
     process.on('SIGTERM', () => graceful('SIGTERM'));
@@ -745,7 +1493,7 @@ async function init() {
   }
 }
 
-// helper to escape HTML attributes
+// escapeHtml folosit la OG card
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -755,5 +1503,4 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
-// run init
 init();
