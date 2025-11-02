@@ -254,7 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
     }
-
     if (applyColorBtn) {
       applyColorBtn.addEventListener('click', () => {
         const candidate = normalizeHex(backgroundHexInput?.value || backgroundColorInput?.value);
