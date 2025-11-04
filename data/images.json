@@ -1,1 +1,31 @@
-[]
+{
+  "images": [
+    {
+      "id": "9e9b9de7-b70f-4358-904e-c6af06c97cf3",
+      "filename": "1762274302355-4dc345f5-29ea-4738-8b38-d9e4d0bc7a26-1762274302355.png",
+      "originalname": "1762274302355.png",
+      "size": 80866,
+      "url": "https://adedge.antonn.ro/i/1762274302355-4dc345f5-29ea-4738-8b38-d9e4d0bc7a26-1762274302355.png",
+      "uploaded_at": 1762274302479,
+      "owner": "admin"
+    },
+    {
+      "id": "3960b4b3-dbf3-42d8-9149-18c1d192fc84",
+      "filename": "1762274324009-43908056-548d-428e-85e6-ddc15f1a8f4c-1762274324009.png",
+      "originalname": "1762274324009.png",
+      "size": 152510,
+      "url": "https://adedge.antonn.ro/i/1762274324009-43908056-548d-428e-85e6-ddc15f1a8f4c-1762274324009.png",
+      "uploaded_at": 1762274324245,
+      "owner": "admin"
+    },
+    {
+      "id": "be9ef1f9-c610-4a75-8706-2bf86ca40d3d",
+      "filename": "1762274425363-80520bdf-6a39-4efa-993a-59bae47a6221-1762274425363.png",
+      "originalname": "1762274425363.png",
+      "size": 131013,
+      "url": "https://adedge.antonn.ro/i/1762274425363-80520bdf-6a39-4efa-993a-59bae47a6221-1762274425363.png",
+      "uploaded_at": 1762274425569,
+      "owner": "admin"
+    }
+  ]
+}
