@@ -1,0 +1,1473 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link id="favicon" rel="icon" type="image/png" href="resources/adsetups-dark.png" sizes="14x14" />
+  <title>ADEdge · Dashboard</title>
+
+   <link href="https://fonts.cdnfonts.com/css/gg-sans-2" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/all.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/sharp-solid.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/sharp-regular.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/sharp-light.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://site-assets.fontawesome.com/releases/v7.0.0/css/duotone.css"
+  />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<style>
+      :root {
+      --bg:#05080f;
+      --surface:#0d1424;
+      --surface-soft:rgba(18,27,44,0.82);
+      --outline:rgba(255,255,255,0.08);
+      --outline-strong:rgba(255,255,255,0.16);
+      --text:#f2f6ff;
+      --text-soft:rgba(226,232,255,0.72);
+      --muted:rgba(172,186,219,0.78);
+      --accent:#4ad4ff;
+      --accent-strong:#55f0ff;
+      --accent-soft:rgba(74,212,255,0.18);
+      --warn:#ff3d61;
+      --glass:#121a2d;
+      --radius-lg:26px;
+      --radius-md:18px;
+      --shadow-lg:0 38px 80px rgba(5,9,20,0.55);
+      --shadow-md:0 20px 46px rgba(5,9,20,0.4);
+      --shadow-sm:0 12px 28px rgba(4,8,18,0.35);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      background: rgb(25, 25, 25) center/cover no-repeat fixed;
+      color: var(--text);
+      line-height: 1.55;
+      position: relative;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(96,152,255,0.6) rgba(9,13,24,0.9);
+      transition: background 0.4s ease, background-image 0.4s ease;
+    }
+
+    body[data-bg-type="color"] {
+      background-image: none !important;
+    }
+
+    body[data-bg-type="image"],
+    body[data-bg-type="template"] {
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-attachment: fixed;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: -40% -30% auto -20%;
+      height: 120vh;
+      background: rgba(74,212,255,0.08);
+      filter: blur(140px);
+      opacity: 0.9;
+      z-index: -2;
+      animation: breathe 26s ease-in-out infinite;
+    }
+
+    body[data-bg-type="image"]::before,
+    body[data-bg-type="template"]::before {
+      opacity: 0.18;
+    }
+
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120"%3E%3Ccircle cx="4" cy="4" r="1" fill="rgba(255,255,255,0.04)"/%3E%3C/svg%3E');
+      opacity: 0.65;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    body[data-bg-type="image"]::after,
+    body[data-bg-type="template"]::after {
+      opacity: 0.35;
+    }
+
+    ::-webkit-scrollbar { width: 12px; }
+    ::-webkit-scrollbar-track { background-color: rgba(9,13,24,0.8); border-radius: 12px; }
+    ::-webkit-scrollbar-thumb {
+      background-color: rgba(94,151,255,0.72);
+      border-radius: 12px;
+      border: 2px solid rgba(5,8,14,0.92);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+      transition: background-color 0.3s ease;
+    }
+    ::-webkit-scrollbar-thumb:hover { background-color: rgba(255,93,135,0.85); }
+
+    a { color: inherit; text-decoration: none; }
+
+    .container {
+      width: min(1180px, 92vw);
+      margin: 0 auto;
+      position: relative;
+      z-index: 2;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 18px;
+      z-index: 50;
+      width: min(1180px, 92vw);
+      margin: 0 auto 38px;
+      border-radius: 32px;
+      background: rgba(14,20,34,0.88);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: none;
+      backdrop-filter: blur(18px);
+      padding: 18px 24px;
+      transition: transform 0.45s ease, background-color 0.45s ease, border-color 0.45s ease, box-shadow 0.45s ease;
+    }
+
+    .topbar.is-scrolled {
+      transform: translateY(-12px) scale(0.995);
+      background: rgba(8,12,22,0.96);
+      border-color: rgba(255,255,255,0.16);
+      box-shadow: 0 18px 40px rgba(5,9,20,0.25);
+    }
+
+    .topbar::after {
+      content: '';
+      position: absolute;
+      inset: 2px;
+      border-radius: 30px;
+      border: 1px solid rgba(255,255,255,0.05);
+      pointer-events: none;
+    }
+
+/* 1. containerul devine "referință" pentru poziționare */
+.topbar-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; /* ca acțiunile să stea la dreapta */
+  gap: 16px;
+}
+
+/* 2. brand-ul îl punem ABSOLUT pe centru */
+.topbar .brand,
+.drawer-top .brand {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%); /* centru pe x și y */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+/* 3. acțiunile rămân în dreapta */
+.top-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  margin-left: auto; /* just in case */
+}
+
+/* ------- animația ta -------- */
+.brand-mark {
+  width: clamp(56px, 6vw, 72px);
+  height: clamp(54px, 6vw, 70px);
+  flex: 0 0 auto;
+  transform: translateX(0);
+  transition: transform 2s cubic-bezier(0.19, 1, 0.22, 1);
+  will-change: transform;
+}
+
+.brand-text-wrap {
+  position: relative;
+  width: clamp(90px, 9vw, 120px);
+  overflow: hidden;
+  height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.brand-text {
+  display: inline-block;
+  white-space: nowrap;
+  font-size: clamp(1.35rem, 2.2vw, 1.6rem);
+  font-weight: 600;
+  color: #fff;
+  transform: translateX(-130%);
+  opacity: 0;
+  transition:
+    transform 2s cubic-bezier(0.19, 1, 0.22, 1),
+    opacity .6s ease-out;
+}
+
+.brand:hover .brand-text {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.brand:hover .brand-mark {
+  transform: translateX(4px);
+}
+
+/* mobil: dacă e prea îngust, centrăm totul unul sub altul */
+@media (max-width: 640px) {
+  .topbar-inner {
+    justify-content: center;
+  }
+  .topbar .brand {
+    position: static;
+    transform: none;
+    margin-bottom: 10px;
+  }
+}
+    /* ============================
+       REST OF UI
+       ============================ */
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .link {
+      font-size: 0.92rem;
+      padding: 10px 16px;
+      border-radius: 999px;
+      color: var(--muted);
+      transition: color 0.25s ease;
+    }
+    .link:hover { color: var(--text); }
+
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .btn {
+      font-weight: 600;
+      border-radius: 18px;
+      padding: 11px 20px;
+      border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer;
+      font-size: 0.95rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(20,28,46,0.72);
+      color: var(--text);
+      transition: transform 0.25s ease, border-color 0.25s ease, background-color 0.25s ease, color 0.25s ease;
+      box-shadow: none;
+    }
+
+    .btn:hover {
+      border-color: rgba(255,255,255,0.32);
+    }
+
+    .btn.primary {
+      background: rgb(0, 136, 255);
+      border-color: rgba(151, 151, 151, 0.097);
+      color: #dff7ff;
+    }
+    .btn.primary:hover {
+      background: rgb(3, 196, 255);
+      border-color: rgba(74,212,255,0.85);
+      color: #fff;
+    }
+
+    .btn.ghost {
+      background: transparent;
+      border-color: rgba(255,255,255,0.16);
+      color: var(--text);
+    }
+    .btn.ghost:hover {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(255,255,255,0.32);
+    }
+
+    .btn.danger {
+      margin-top: 50px;
+    }
+
+    .btn.logout {
+      background: transparent;
+      border-color: rgba(255,255,255,0.12);
+      color: var(--text);
+    }
+    .btn.logout:hover {
+      background: rgba(255,82,100,0.12);
+      border-color: rgba(255,82,100,0.6);
+      color: #ff8a99;
+    }
+
+    .hero {
+      padding: 120px 0 100px;
+      position: relative;
+    }
+
+    .hero::before,
+    .hero::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.35;
+      pointer-events: none;
+      background: rgba(84,130,255,0.18);
+      filter: blur(60px);
+    }
+
+    .hero::before {
+      width: 420px;
+      height: 420px;
+      top: -140px;
+      left: -140px;
+      animation: floatOne 18s ease-in-out infinite;
+    }
+
+    .hero::after {
+      width: 360px;
+      height: 360px;
+      bottom: -100px;
+      right: -120px;
+      animation: floatTwo 22s ease-in-out infinite;
+    }
+
+    .hero-inner {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 40px;
+      align-items: center;
+    }
+
+    .hero-copy {
+      grid-column: span 7;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.78rem;
+      letter-spacing: 0.32em;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 1px solid var(--outline);
+      background: rgba(16,24,40,0.85);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2.6rem, 4vw, 3.8rem);
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--text-soft);
+      max-width: 540px;
+      font-size: 1.05rem;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .hero-stats {
+      grid-column: span 5;
+      background: var(--surface-soft);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--outline);
+      padding: 28px;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-stats::before,
+    .hero-stats::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.08);
+      border-radius: 48% 52% 58% 42%;
+      filter: blur(0px);
+      opacity: 0.55;
+      pointer-events: none;
+    }
+
+    .hero-stats::before {
+      width: 180px;
+      height: 180px;
+      top: -70px;
+      right: -50px;
+      animation: liquidDrift 20s linear infinite;
+    }
+
+    .hero-stats::after {
+      width: 140px;
+      height: 140px;
+      bottom: -40px;
+      left: -30px;
+      animation: liquidDrift 26s linear infinite reverse;
+    }
+
+    .stat-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .stat {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 16px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .stat:last-child { border-bottom: 0; }
+
+    .stat strong { font-size: 2rem; letter-spacing: -0.02em; }
+    .stat span { color: var(--muted); font-size: 0.9rem; max-width: 200px; }
+
+    .main-grid-wrapper {
+      position: relative;
+      margin-top: -40px;
+      padding-bottom: 160px;
+    }
+
+    .main-grid {
+      top: 100px;
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 26px;
+    }
+
+    .card {
+      background: var(--surface-soft);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--outline);
+      padding: 30px;
+      box-shadow: var(--shadow-md);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      width: 220px;
+      height: 220px;
+      top: -110px;
+      right: -80px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 50%;
+      filter: blur(0px);
+      opacity: 0.55;
+      pointer-events: none;
+    }
+
+    .card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: 1px solid rgba(255,255,255,0.04);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-lg);
+      border-color: var(--outline-strong);
+    }
+    .card:hover::after { opacity: 1; }
+
+    .is-hidden {
+      opacity: 0;
+    }
+
+    .revealed {
+      opacity: 1;
+    }
+
+    .upload-card { grid-column: span 5; display: flex; flex-direction: column; gap: 22px; }
+    .gallery-card { grid-column: span 7; display: flex; flex-direction: column; gap: 22px; min-height: 360px; }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .card-header h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      letter-spacing: 0.04em;
+    }
+
+    .muted { color: var(--muted); }
+
+    .dropzone {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 22px 24px;
+      border-radius: var(--radius-md);
+      border: 1px dashed rgba(255,255,255,0.18);
+      background: rgba(17,25,42,0.84);
+      cursor: pointer;
+      transition: border-color 0.3s ease, transform 0.3s ease, background-color 0.3s ease;
+      outline: none;
+    }
+
+    .dropzone .icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background: rgba(34,44,68,0.9);
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+
+    .dropzone strong { font-size: 1.08rem; display: block; margin-bottom: 4px; }
+    .dropzone span { color: var(--muted); font-size: 0.92rem; }
+
+    .dropzone.is-hovered {
+      border-color: rgba(74,212,255,0.5);
+      transform: translateY(-2px);
+      background: rgba(20,30,52,0.9);
+    }
+
+    .file-chooser {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    input[type="file"] { position: absolute; left: -9999px; }
+
+    .choose-btn {
+      background: rgba(24,32,50,0.72);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px;
+      color: var(--text);
+      padding: 10px 18px;
+      cursor: pointer;
+      transition: border-color 0.25s ease, background-color 0.25s ease, color 0.25s ease;
+      box-shadow: none;
+    }
+    .choose-btn:hover {
+      background: rgba(74,212,255,0.12);
+      border-color: rgba(74,212,255,0.5);
+      color: #dff7ff;
+    }
+
+    .file-name {
+      font-size: 0.85rem;
+      color: var(--muted);
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .upload-form { display: flex; flex-direction: column; gap: 20px; }
+
+    .upload-controls {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .preview {
+      width: 72px;
+      height: 72px;
+      border-radius: 16px;
+      background: rgba(22,30,48,0.82);
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(255,255,255,0.06);
+      overflow: hidden;
+    }
+
+    .preview img { width: 100%; height: 100%; object-fit: cover; }
+
+    #uploadStatus { min-height: 20px; font-size: 0.9rem; color: var(--muted); transition: opacity 0.3s ease; }
+
+    .images-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 18px;
+    }
+
+    .img-card {
+      background: rgba(18,26,44,0.88);
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.06);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      box-shadow: var(--shadow-sm);
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .img-card:hover {
+      transform: translateY(-6px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .img-thumb { width: 100%; height: 140px; object-fit: cover; background: rgba(15,20,32,0.8); }
+
+    .img-meta {
+      padding: 14px 16px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .meta-name { font-size: 0.92rem; font-weight: 500; color: var(--text); word-break: break-word; }
+
+    .meta-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
+    .meta-actions button,
+    .meta-actions a {
+      background: rgba(26,34,56,0.78);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 0.82rem;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: transform 0.22s ease, background-color 0.22s ease;
+    }
+
+    .meta-actions button:hover,
+    .meta-actions a:hover {
+      transform: translateY(-2px);
+      background: rgba(255,255,255,0.08);
+    }
+
+    .empty { text-align: center; padding: 60px 20px; border: 1px dashed rgba(255,255,255,0.12); border-radius: 20px; background: rgba(15,22,36,0.6); }
+
+    .liquid-deck {
+      margin-top: 40px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 22px;
+    }
+
+    .delete {
+      margin-left: 50px;
+    }
+
+    .liquid-card {
+      position: relative;
+      padding: 28px;
+      border-radius: var(--radius-lg);
+      background: rgba(17,26,44,0.88);
+      border: 1px solid var(--outline);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+      min-height: 220px;
+    }
+
+    .liquid-card::before,
+    .liquid-card::after {
+      content: '';
+      position: absolute;
+      background: rgba(255,255,255,0.08);
+      border-radius: 52% 48% 60% 40%;
+      filter: blur(0px);
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .liquid-card::before {
+      width: 180px;
+      height: 180px;
+      top: -90px;
+      right: -70px;
+      animation: liquidDrift 26s linear infinite;
+    }
+
+    .liquid-card::after {
+      width: 150px;
+      height: 150px;
+      bottom: -70px;
+      left: -60px;
+      animation: liquidDrift 22s linear infinite reverse;
+    }
+
+    .liquid-card h3 {
+      margin-top: 20px;
+      font-size: 1.2rem;
+    }
+
+    .liquid-card p {
+      margin-bottom: 0;
+      color: var(--text-soft);
+      font-size: 0.95rem;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      color: var(--muted);
+      font-size: 0.75rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+
+    .activity {
+      margin: 80px auto 40px;
+      display: grid;
+      gap: 24px;
+    }
+
+    .activity-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 18px;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 18px;
+      align-items: start;
+      background: rgba(18,26,44,0.82);
+      border-radius: 20px;
+      padding: 18px 20px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .timeline-time {
+      font-size: 0.78rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .timeline-body strong { display: block; font-size: 1rem; margin-bottom: 6px; }
+    .timeline-body span { color: var(--text-soft); font-size: 0.9rem; }
+
+.cta-strip {
+  margin: 80px 0 70px;
+  margin-left: 100px; /* împinsă fix la dreapta pe desktop */
+  background: rgba(18,26,46,0.9);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-lg);
+  padding: 36px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  box-shadow: var(--shadow-md);
+  width: calc(100% - 170px); /* 🧠 compensează margin-left */
+  box-sizing: border-box;
+}
+
+/* pe mobile (sub 768px) — o lăsăm full width */
+@media (max-width: 768px) {
+  .cta-strip {
+    margin-left: 0;
+    width: 100%;
+    padding: 24px;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+    .cta-strip h2 { margin: 0; font-size: 1.6rem; }
+    .cta-strip p { margin: 0; color: var(--muted); }
+
+    .footer {
+      padding: 40px 0 70px;
+      text-align: center;
+      font-size: 0.85rem;
+      color: var(--muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(4,6,12,0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 16px;
+      z-index: 100;
+    }
+
+    .modal.show { display: flex; }
+
+    .modal-inner {
+      position: relative;
+      background: rgba(14,20,34,0.95);
+      border-radius: 24px;
+      padding: 24px;
+      border: 1px solid rgba(255,255,255,0.1);
+      max-width: 960px;
+      width: min(96vw, 960px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .modal-inner img {
+      max-width: 100%;
+      max-height: 70vh;
+      border-radius: 18px;
+      display: block;
+      margin-bottom: 18px;
+    }
+
+    .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+
+    .modal-actions .btn { padding: 10px 18px; font-size: 0.9rem; }
+
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 18px;
+      background: rgba(24,32,52,0.82);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--text);
+      border-radius: 999px;
+      width: 36px;
+      height: 36px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+    }
+    .modal-close:hover { background: rgba(255,255,255,0.12); }
+
+    @keyframes breathe {
+      0%,100% { transform: translate3d(0,0,0) scale(1); }
+      50% { transform: translate3d(4%, -4%, 0) scale(1.05); }
+    }
+
+    @keyframes floatOne {
+      0%,100% { transform: translate3d(0,0,0); }
+      50% { transform: translate3d(20px, -10px, 0); }
+    }
+
+    @keyframes floatTwo {
+      0%,100% { transform: translate3d(0,0,0); }
+      50% { transform: translate3d(-30px, 18px, 0); }
+    }
+
+    @keyframes liquidDrift {
+      0% { transform: rotate(0deg) scale(1); }
+      50% { transform: rotate(180deg) scale(1.05); }
+      100% { transform: rotate(360deg) scale(1); }
+    }
+
+    @keyframes liquidSheen {
+      0% { transform: translate3d(0,0,0); opacity: 0.45; }
+      50% { transform: translate3d(-40px, 30px, 0); opacity: 0.7; }
+      100% { transform: translate3d(0,0,0); opacity: 0.45; }
+    }
+</style>
+<body>
+ <header class="topbar" role="banner">
+    <div class="topbar-inner">
+
+      <!-- Brand (logo + Edge) -->
+      <a href="/" class="brand">
+        <img src="https://files.catbox.moe/qcb3nu.webp" alt="Edge emblem" class="brand-mark" draggable="false" />
+        <span class="brand-text-wrap">
+          <span class="brand-text">Edge</span>
+        </span>
+      </a>
+
+      <nav class="top-actions" aria-label="Top actions">
+        <a class="link" href="/settings">Settings</a>
+        <button id="logoutBtn" class="btn logout" type="button">Log out</button>
+      </nav>
+    </div>
+  </header>
+
+  <div class="main-grid-wrapper" id="main">
+    <main class="container main-grid">
+      <section class="card upload-card" aria-labelledby="uploadTitle">
+        <div class="card-header">
+          <div>
+            <h2 id="uploadTitle">Upload your image</h2>
+            <p class="muted">Add your image to the gallery and use it later</p>
+          </div>
+          <div class="pill" style="display: none;">Secure</div>
+        </div>
+
+        <div class="dropzone" id="dropzone" tabindex="0" aria-label="Drop media here or press to browse">
+          <div class="icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none"><path d="M12 5v14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M5 12l7-7 7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div>
+            <strong>Drop media to upload</strong>
+            <span>Images, GIFs, MP4 previews — ADEdge handles them in seconds.</span>
+          </div>
+        </div>
+
+        <div class="file-chooser" role="group" aria-label="File chooser">
+          <input type="file" id="fileInput" name="file" accept="image/*,video/*" aria-hidden="true">
+          <button id="chooseBtn" type="button" class="choose-btn">Choose file</button>
+          <div class="file-name" id="fileName">No file selected</div>
+        </div>
+
+        <form id="uploadForm" class="upload-form" novalidate>
+          <div class="upload-controls">
+            <button type="submit" class="btn primary">Upload now</button>
+            <div class="preview" id="filePreview" aria-hidden="true">
+              <i class="fa-light fa-camera-viewfinder" style="font-size: 30px;"></i>
+            </div>
+            <div id="uploadStatus" aria-live="polite"></div>
+          </div>
+        </form>
+      </section>
+
+      <section class="card gallery-card" aria-labelledby="galleryTitle">
+        <div class="card-header">
+          <h2 id="galleryTitle">Gallery</h2>
+          <p class="muted">ADEdge is always keep your data synced.</p>
+        </div>
+
+        <div id="imagesGrid" class="images-grid" role="list" aria-live="polite"></div>
+
+        <div id="galleryEmpty" class="empty muted" hidden>
+          There's no images yet, send your first image on ADEdge!
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <section class="container liquid-deck" aria-label="Workflow boosters">
+    <article class="liquid-card">
+      <div class="pill">Automation</div>
+      <h3>ADEdge wants to make your life easier</h3>
+      <p>Make your image accesible from internet in seconds without manual intervention.</p>
+    </article>
+    <article class="liquid-card">
+      <div class="pill">Image</div>
+      <h3>ADEdge quality</h3>
+      <p>Your image is enhanced to be in its best form!</p>
+    </article>
+    <article class="liquid-card">
+      <div class="pill">Upload</div>
+      <h3>Instant upload</h3>
+      <p>Our systems are designed to serve your image to the internet in miliseconds.</p>
+    </article>
+  </section>
+
+  <section class="container cta-strip" aria-label="Collaboration callout">
+    <div>
+      <h2>Ready for another batch?</h2>
+      <p>Loop back to the uploader whenever you need to push fresh assets or refresh previews.</p>
+    </div>
+    <a class="btn ghost" href="#uploadTitle">Return to uploader</a>
+  </section>
+
+  <footer class="container footer">
+    <small>ADEdge · Token-protected uploads · Manage access in Settings</small>
+  </footer>
+
+  <div id="previewModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-inner">
+      <button id="modalClose" class="modal-close" type="button" aria-label="Close preview">✕</button>
+      <h2 id="modalTitle" class="visually-hidden">Asset preview</h2>
+      <img id="modalImg" src="" alt="Preview" />
+      <div class="modal-actions" id="modalActions">
+        <!-- row 1: Copy + Open -->
+        <div class="modal-row-top" style="display:flex;gap:8px;justify-content:center;">
+          <button id="copyUrl" class="btn ghost" type="button">Copy URL</button>
+          <a id="openInNew" class="btn primary" href="#" target="_blank" rel="noopener">Open asset</a>
+        </div>
+        <!-- row 2: Delete singur și centrat dedesubt -->
+        <div class="modal-row-bottom" style="display:flex;justify-content:center;margin-top:8px;">
+          <button id="modalDelete" class="btn danger" type="button">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      const TOKEN_KEY = 'uploadToken'; // folosit doar pt ShareX, nu pt dashboard upload
+      const FALLBACK_BASE = '/uploads/';
+
+      const dropzone = document.getElementById('dropzone');
+      const fileInput = document.getElementById('fileInput');
+      const chooseBtn = document.getElementById('chooseBtn');
+      const fileNameEl = document.getElementById('fileName');
+      const uploadForm = document.getElementById('uploadForm');
+      const filePreview = document.getElementById('filePreview');
+      const uploadStatus = document.getElementById('uploadStatus');
+      const imagesGrid = document.getElementById('imagesGrid');
+      const galleryEmpty = document.getElementById('galleryEmpty');
+      const logoutBtn = document.getElementById('logoutBtn');
+      const topbar = document.querySelector('.topbar');
+
+      const previewModal = document.getElementById('previewModal');
+      const modalImg = document.getElementById('modalImg');
+      const modalClose = document.getElementById('modalClose');
+      const copyUrlBtn = document.getElementById('copyUrl');
+      const openInNew = document.getElementById('openInNew');
+      const modalDeleteBtn = document.getElementById('modalDelete');
+
+      // ce imagine e deschisă în modal (filename pt delete, url pt copy/open)
+      let currentPreviewFilename = null;
+      let currentPreviewUrl = null;
+
+      function getStoredToken(){
+        try { return localStorage.getItem(TOKEN_KEY) || null; }
+        catch(e){ return null; }
+      }
+
+      function setStoredToken(token){
+        try {
+          if(token) localStorage.setItem(TOKEN_KEY, token);
+          else localStorage.removeItem(TOKEN_KEY);
+        } catch(e){ /* ignore */ }
+      }
+
+      if(topbar){
+        const updateTopbar = () => {
+          const atTop = window.scrollY <= 8;
+          topbar.classList.toggle('is-scrolled', !atTop);
+        };
+        updateTopbar();
+        window.addEventListener('scroll', updateTopbar, { passive: true });
+      }
+
+      if(logoutBtn){
+        logoutBtn.addEventListener('click', async () => {
+          try { await fetch('/api/logout', { method: 'POST' }); } catch(e){ /* ignore */ }
+          setStoredToken(null);
+          window.location.href = '/login';
+        });
+      }
+
+      // drag & drop logic
+      if(dropzone){
+        const toggleHover = (state) => dropzone.classList.toggle('is-hovered', state);
+        ['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); toggleHover(true); }));
+        ['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => { e.preventDefault(); toggleHover(false); }));
+        dropzone.addEventListener('drop', e => {
+          const files = e.dataTransfer.files;
+          if(files && files[0]){
+            fileInput.files = files;
+            fileInput.dispatchEvent(new Event('change'));
+          }
+        });
+        dropzone.addEventListener('click', () => fileInput && fileInput.click());
+        dropzone.addEventListener('keydown', e => {
+          if(e.key === 'Enter' || e.key === ' '){
+            e.preventDefault();
+            fileInput && fileInput.click();
+          }
+        });
+      }
+
+      if(chooseBtn) chooseBtn.addEventListener('click', () => fileInput && fileInput.click());
+
+      if(fileInput){
+        fileInput.addEventListener('change', () => {
+          const file = fileInput.files && fileInput.files[0];
+          if(!file){
+            fileNameEl.textContent = 'No file selected';
+            filePreview.innerHTML = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 11l4-4 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            return;
+          }
+          fileNameEl.textContent = file.name;
+          const url = URL.createObjectURL(file);
+          filePreview.innerHTML = `<img src="${url}" alt="Selected preview">`;
+        });
+      }
+
+      // Upload prin dashboard (autentificat prin cookie sesiune)
+      if(uploadForm){
+        uploadForm.addEventListener('submit', async (event) => {
+          event.preventDefault();
+          const file = fileInput && fileInput.files && fileInput.files[0];
+          if(!file){
+            showStatus('Select a file before uploading.');
+            return;
+          }
+
+          const form = new FormData();
+          form.append('file', file);
+          const headers = {}; // pt dashboard nu trimitem Authorization, cookie-ul de sesiune e destul
+
+          try {
+            showStatus('Uploading…');
+            const res = await fetch('/api/upload', { method: 'POST', headers, body: form });
+            if(!res.ok){
+              const message = await res.text();
+              throw new Error(message || 'Upload failed');
+            }
+            showStatus('Upload complete. Refreshing gallery…');
+            fileInput.value = '';
+            fileNameEl.textContent = 'No file selected';
+            filePreview.innerHTML = '<svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M5 14v5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 11l4-4 4 4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 7v9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+            loadGallery();
+          } catch(err){
+            console.error(err);
+            showStatus('Upload failed: ' + (err.message || err));
+          }
+        });
+      }
+
+      function showStatus(msg){
+        if(!uploadStatus) return;
+        uploadStatus.textContent = msg;
+        uploadStatus.style.opacity = '1';
+        clearTimeout(uploadStatus._t);
+        uploadStatus._t = setTimeout(() => uploadStatus.style.opacity = '0.7', 3600);
+      }
+
+      // ---- Gallery build (Copy/Open pe primul rând, Delete sub ele centrat) ----
+      async function loadGallery(){
+        if(!imagesGrid) return;
+        try {
+          imagesGrid.innerHTML = '<div class="muted">Loading gallery…</div>';
+
+          const res = await fetch('/api/images', { method: 'GET' });
+          if(!res.ok) throw new Error('Failed to load images');
+
+          const payload = await res.json();
+          let items = [];
+          if (payload && Array.isArray(payload.images)) {
+            items = payload.images;
+          }
+
+          if(!Array.isArray(items) || items.length === 0){
+            imagesGrid.innerHTML = '';
+            if(galleryEmpty) galleryEmpty.hidden = false;
+            return;
+          }
+
+          imagesGrid.innerHTML = '';
+          if(galleryEmpty) galleryEmpty.hidden = true;
+
+          items.forEach(item => {
+            // item = { id, filename, originalname, url, ... }
+            let url = '';
+            let name = '';
+            let uniqueFilename = '';
+
+            if(item && typeof item === 'object'){
+              uniqueFilename = item.filename || '';
+              url = item.url || item.path || item.href || '';
+              name = item.name || item.filename || item.originalname || '';
+              if(!url && item.filename) url = item.filename;
+            } else if(typeof item === 'string'){
+              const trimmed = item.trim();
+              url = trimmed;
+              name = trimmed.split('/').pop();
+              uniqueFilename = trimmed.split('/').pop();
+            }
+
+            if(!url) return;
+            if(!/^https?:\/\//i.test(url) && !url.startsWith('/')){
+              url = FALLBACK_BASE + encodeURIComponent(url);
+            }
+            if(!name) name = url.split('/').pop() || 'asset';
+
+            const card = document.createElement('div');
+            card.className = 'img-card';
+            card.setAttribute('role', 'listitem');
+
+            const img = document.createElement('img');
+            img.className = 'img-thumb';
+            img.src = url;
+            img.alt = name;
+            img.loading = 'lazy';
+            img.onerror = function(){ this.src = '/public/image-fallback.png'; };
+
+            const meta = document.createElement('div');
+            meta.className = 'img-meta';
+
+            const metaName = document.createElement('div');
+            metaName.className = 'meta-name';
+            metaName.textContent = name;
+
+            const actions = document.createElement('div');
+            actions.className = 'meta-actions';
+
+            // rând 1: Copy + Open pe o singură linie
+            const rowTop = document.createElement('div');
+            rowTop.className = 'meta-row-top';
+            rowTop.style.display = 'flex';
+            rowTop.style.gap = '8px';
+            rowTop.style.justifyContent = 'center';
+
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.textContent = 'Copy';
+
+            const openLink = document.createElement('a');
+            openLink.href = url;
+            openLink.target = '_blank';
+            openLink.rel = 'noopener noreferrer';
+            openLink.textContent = 'Open';
+            openLink.className = 'open-link-btn';
+
+            rowTop.appendChild(copyBtn);
+            rowTop.appendChild(openLink);
+
+            // rând 2: Delete singur, centrat sub ele
+            const rowBottom = document.createElement('div');
+            rowBottom.className = 'meta-row-bottom';
+            rowBottom.style.display = 'flex';
+            rowBottom.style.width = '100%';
+            rowBottom.style.justifyContent = 'center';
+            rowBottom.style.marginTop = '6px';
+
+            const delBtn = document.createElement('button');
+            delBtn.type = 'button';
+            delBtn.textContent = 'Delete';
+            delBtn.className = 'danger-btn';
+
+            rowBottom.appendChild(delBtn);
+
+            actions.appendChild(rowTop);
+            actions.appendChild(rowBottom);
+
+            meta.appendChild(metaName);
+            meta.appendChild(actions);
+
+            card.appendChild(img);
+            card.appendChild(meta);
+            imagesGrid.appendChild(card);
+
+            // --- listeners ---
+            img.addEventListener('click', () => openPreview(url, uniqueFilename));
+
+            copyBtn.addEventListener('click', (ev) => {
+              ev.stopPropagation();
+              copyToClipboard(url);
+            });
+
+            delBtn.addEventListener('click', async (ev) => {
+              ev.stopPropagation();
+              if(!uniqueFilename){
+                showStatus('Cannot delete: missing filename.');
+                return;
+              }
+              await deleteImage(uniqueFilename);
+            });
+          });
+        } catch(err){
+          console.error('loadGallery error:', err);
+          imagesGrid.innerHTML = '<div class="muted">Gallery failed to load. Check the /api/images endpoint.</div>';
+        }
+      }
+
+      // ---- Modal preview: Copy + Open sus, Delete jos ----
+      function openPreview(url, filename){
+        if(!previewModal) return;
+        currentPreviewFilename = filename || null;
+        currentPreviewUrl = url || null;
+
+        modalImg.src = url;
+        openInNew.href = url;
+
+        copyUrlBtn.onclick = () => copyToClipboard(url);
+
+        modalDeleteBtn.onclick = async () => {
+          if(!currentPreviewFilename){
+            showStatus('Cannot delete: missing filename.');
+            return;
+          }
+          await deleteImage(currentPreviewFilename);
+          closeModal();
+        };
+
+        previewModal.classList.add('show');
+      }
+
+      function closeModal(){
+        if(!previewModal) return;
+        previewModal.classList.remove('show');
+        modalImg.src = '';
+        currentPreviewFilename = null;
+        currentPreviewUrl = null;
+      }
+
+      if(modalClose) modalClose.addEventListener('click', closeModal);
+      if(previewModal) previewModal.addEventListener('click', (e) => {
+        if(e.target === previewModal) closeModal();
+      });
+
+      async function copyToClipboard(text){
+        try {
+          await navigator.clipboard.writeText(text);
+          showStatus('URL copied to clipboard.');
+        } catch(err){
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.setAttribute('readonly', '');
+          ta.style.position = 'absolute';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          try {
+            document.execCommand('copy');
+            showStatus('URL copied.');
+          } catch(e) {
+            showStatus('Copy failed.');
+          }
+          ta.remove();
+        }
+      }
+
+      // șterge imaginea din server după filename
+      async function deleteImage(filename){
+        const sure = confirm('Delete this image?');
+        if(!sure) return;
+
+        try {
+          showStatus('Deleting image…');
+          const res = await fetch('/api/images', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename })
+          });
+          if(!res.ok){
+            const msg = await res.text();
+            throw new Error(msg || 'Delete failed');
+          }
+          showStatus('Image deleted.');
+          loadGallery();
+        } catch(err){
+          console.error(err);
+          showStatus('Delete failed: ' + (err.message || err));
+        }
+      }
+
+      // card reveal anim
+      ;(function revealCards(){
+        const cards = document.querySelectorAll('.card, .liquid-card, .timeline-item, .cta-strip');
+        const observer = new IntersectionObserver((entries) => {
+          entries.forEach(entry => {
+            if(entry.isIntersecting){
+              entry.target.classList.remove('is-hidden');
+              entry.target.classList.add('revealed');
+              observer.unobserve(entry.target);
+            }
+          });
+        }, { threshold: 0.18 });
+
+        cards.forEach(card => {
+          card.classList.remove('revealed');
+          card.classList.add('is-hidden');
+          observer.observe(card);
+        });
+      })();
+
+      // shortcut "u" -> open file picker
+      window.addEventListener('keydown', (event) => {
+        if(event.key.toLowerCase() === 'u' && fileInput && document.activeElement === document.body){
+          fileInput.click();
+        }
+      });
+
+      // când revii în tab, reîncarcă pozele tale
+      document.addEventListener('visibilitychange', () => {
+        if(document.visibilityState === 'visible') loadGallery();
+      });
+
+      // încarcă galeria imediat la load
+      loadGallery();
+    })();
+  </script>
+
+  <script>
+  (function(){
+    try {
+      var raw = localStorage.getItem('bgPref');
+      if (!raw) return;
+      var pref = JSON.parse(raw);
+      var b = document.body;
+      if (!b) { return; }
+      b.style.removeProperty('background-image');
+      b.style.removeProperty('background-color');
+      b.style.removeProperty('background');
+      b.removeAttribute('data-bg-type');
+
+      if (pref.type === 'color') {
+        b.style.backgroundColor = pref.value;
+        b.setAttribute('data-bg-type', 'color');
+      } else if (pref.type === 'template' || pref.type === 'image') {
+        b.style.backgroundImage = "url('" + pref.value + "')";
+        b.setAttribute('data-bg-type', pref.type);
+      }
+    } catch(e){}
+  })();
+  </script>
+</body>
+</html>

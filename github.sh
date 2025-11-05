@@ -11,6 +11,5 @@ fi
 git add .
 
 git commit -m "ADEdge Update"
-git pull --no-rebase
 
 git push --set-upstream origin main
