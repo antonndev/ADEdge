@@ -1,1 +1,1 @@
-/ADEdge-rust/target/release/adedge-server: /ADEdge-rust/src/main.rs
+/ADEdge/target/release/adedge-server: /ADEdge/src/main.rs

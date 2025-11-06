@@ -1,0 +1,1 @@
+cargo:rustc-env=MIME_TYPES_GENERATED_PATH=/ADEdge/target/release/build/mime_guess-446f621302401981/out/mime_types_generated.rs

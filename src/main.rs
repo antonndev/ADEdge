@@ -1,7 +1,7 @@
 // main.rs — ADEdge (axum) server stabil și low-footprint
 //
 // ✔ rute & comportamente ca în varianta Node
-// ✔ HTTP simplu (TLS recomandat din reverse proxy: Caddy/NGINX)
+// ✔ HTTP simplu + TLS nativ opțional (axum-server) dacă ai SSL_* în .env
 // ✔ .env bootstrap (creează cheile lipsă fără a strica ce ai)
 // ✔ users.json / images.json / settings.json (persistență)
 // ✔ autentificare cu cookie HMAC (username.ts.hmac), 30 zile, httpOnly
@@ -36,7 +36,10 @@
 // tokio-util = { version = "0.7", features = ["io"] }
 // chrono = { version = "0.4", default-features = false, features = ["clock"] }
 // urlencoding = "2"
-// tokio-stream = "0.1"     // <— nou, pentru stream pe Body
+// tokio-stream = "0.1"
+//
+// # pentru TLS nativ
+// axum-server = { version = "0.6", features = ["tls-rustls"] }
 //
 // Build & run:
 //   cargo run --release
@@ -55,6 +58,10 @@ use parking_lot::Mutex;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+
+use axum_server::tls_rustls::RustlsConfig;
+use axum::{response::Redirect, extract::{Host, OriginalUri}};
+
 use std::{
     collections::HashMap,
     fs,
@@ -65,8 +72,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::{fs as tfs, io::AsyncWriteExt, signal};
-use tokio_stream::StreamExt; // <— pentru .next() pe BodyDataStream
+use tokio_util::io::ReaderStream;
+use tokio_stream::StreamExt; // pentru .next() pe BodyDataStream
 use tower_http::services::ServeDir;
+use tokio::io::{AsyncReadExt, AsyncSeekExt}; // pentru .take() și .seek()
+use std::io::SeekFrom;                       // pentru SeekFrom::Start(...)
 use uuid::Uuid;
 
 // ========================= Constante & Defaults =========================
@@ -541,6 +551,22 @@ fn get_origin(headers: &HeaderMap, scheme: &str, host: &str) -> String {
     format!("{}://{}", proto, host_hdr)
 }
 
+fn prefer_https_origin(origin: &str, headers: &HeaderMap, state: &AppState) -> String {
+    let req_proto = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("http");
+
+    let https_possible = req_proto.eq_ignore_ascii_case("https")
+        || (state.cfg.ssl_key_path.is_some() && state.cfg.ssl_cert_path.is_some());
+
+    if https_possible && origin.starts_with("http://") {
+        origin.replacen("http://", "https://", 1)
+    } else {
+        origin.to_string()
+    }
+}
+
 fn client_user(user: &User) -> serde_json::Value {
     serde_json::json!({
         "username": user.username,
@@ -963,7 +989,11 @@ async fn upload_handler(
         .get(header::HOST)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    let scheme = "http"; // best-effort
+
+    // alege schema corectă (https dacă serverul are TLS configurat, altfel http)
+    let have_tls = state.cfg.ssl_key_path.is_some() && state.cfg.ssl_cert_path.is_some();
+    let scheme = if have_tls { "https" } else { "http" };
+
     finalize_upload(
         &state,
         &headers,
@@ -986,42 +1016,231 @@ async fn image_view(
     if !file_path.starts_with(&state.cfg.upload_dir) || !file_path.exists() {
         return json_error(StatusCode::NOT_FOUND, "Not found");
     }
-    let host = headers.get(header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("");
-    let origin = get_origin(&headers, "http", host);
-    let image_url = join_url(&origin, &format!("/i/{}", urlencoding::encode(&filename)));
-    let page_url = join_url(
-        &origin,
-        &format!("/i/{}/view", urlencoding::encode(&filename)),
-    );
-    let image_title = filename.clone();
+
+    let host   = headers.get(header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("");
+    let origin_env_or_hdr = std::env::var("PUBLIC_ORIGIN")
+        .unwrap_or_else(|_| get_origin(&headers, "http", host));
+    let origin_best = prefer_https_origin(&origin_env_or_hdr, &headers, &state);
+
+    let media_url = join_url(&origin_best, &format!("/i/{}", urlencoding::encode(&filename)));
+    let page_url  = join_url(&origin_best, &format!("/i/{}/view", urlencoding::encode(&filename)));
+    let title     = filename.clone();
+
+    let mime     = mime_guess::from_path(&file_path).first_or_octet_stream();
+    let is_video = mime.type_() == mime::VIDEO;
+
+    // normalizăm tipul pt OG (Discord preferă video/mp4)
+    let ext = std::path::Path::new(&filename).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let og_video_type = match ext.as_str() {
+        "mp4" | "m4v" => "video/mp4",
+        "webm"        => "video/webm",
+        // unele .mov vin ca video/quicktime; Discord nu le iubește -> încearcă mp4
+        "mov"         => "video/mp4",
+        _             => mime.as_ref(), // fallback la ce a ghicit mime_guess
+    };
+
+    // forțăm URL-ul secure dacă pagina e https (Discord preferă secure_url)
+    let media_url_https = if media_url.starts_with("http://") && origin_best.starts_with("https://") {
+        media_url.replacen("http://", "https://", 1)
+    } else {
+        media_url.clone()
+    };
+    let is_https_media = media_url_https.starts_with("https://");
+
+    let media_tag = if is_video {
+        format!(
+            "<video src=\"{}\" controls preload=\"metadata\" playsinline style=\"max-width:100%;max-height:80vh;border:6px solid rgba(255,255,255,0.06);box-shadow:0 6px 18px rgba(0,0,0,0.2);border-radius:8px\"></video>",
+            escape_html(&media_url_https)
+        )
+    } else {
+        format!(
+            "<img src=\"{}\" alt=\"Shared file\" style=\"max-width:100%;max-height:80vh;border:6px solid rgba(255,255,255,0.06);box-shadow:0 6px 18px rgba(0,0,0,0.2);border-radius:8px\"/>",
+            escape_html(&media_url)
+        )
+    };
+
+    // --- OG pentru Discord: video ---
+    let og_block = if is_video {
+        use std::fmt::Write as _;
+        let mut meta = String::new();
+
+        // Tipul OG de pagină + video URL + tip + dimensiuni
+        let _ = write!(
+            meta,
+            r#"<meta property="og:type" content="video.other">
+               <meta property="og:video" content="{u}">
+               <meta property="og:video:type" content="{t}">
+               <meta property="og:video:width" content="1280">
+               <meta property="og:video:height" content="720">"#,
+            u = escape_html(&media_url_https),
+            t = escape_html(og_video_type)
+        );
+
+        // secure_url dacă avem https
+        if is_https_media {
+            let _ = write!(
+                meta,
+                r#"<meta property="og:video:secure_url" content="{u}">"#,
+                u = escape_html(&media_url_https)
+            );
+        }
+
+        // og:image e recomandat (folosim video ca fallback poster)
+        let _ = write!(
+            meta,
+            r#"<meta property="og:image" content="{img}">
+               <meta name="twitter:card" content="player">"#,
+            img = escape_html(&media_url_https)
+        );
+
+        meta
+    } else {
+        // --- OG pentru imagini ---
+        format!(
+            r#"<meta property="og:image" content="{}">
+               <meta property="og:type" content="article">
+               <meta name="twitter:card" content="summary_large_image">"#,
+            escape_html(&media_url)
+        )
+    };
 
     let html = format!(
-        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>Image view</title>\n<meta property=\"og:type\" content=\"article\">\n<meta property=\"og:site_name\" content=\"ADEdge\">\n<meta property=\"og:title\" content=\"{}\">\n<meta property=\"og:description\" content=\"uploaded on ADEdge\">\n<meta property=\"og:url\" content=\"{}\">\n<meta property=\"og:image\" content=\"{}\">\n<meta name=\"twitter:card\" content=\"summary_large_image\">\n<style>html,body{{height:100%;margin:0}}body{{display:flex;align-items:center;justify-content:center;background:#0f9d58;color:#0a0a0a;font-family:Arial,Helvetica,sans-serif}}.container{{max-width:90%;max-height:90%;display:flex;align-items:center;justify-content:center;flex-direction:column}}img{{max-width:100%;max-height:80vh;border:6px solid rgba(255,255,255,0.06);box-shadow:0 6px 18px rgba(0,0,0,0.2);border-radius:8px}}.note{{margin-top:12px;color:rgba(255,255,255,0.9);font-size:14px}}</style>\n</head>\n<body><div class=\"container\"><img src=\"{}\" alt=\"Shared image\"><div class=\"note\">This image was uploaded on ADEdge.</div></div></body></html>",
-        escape_html(&image_title),
+        "<!doctype html><html lang=\"en\"><head>
+         <meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+         <title>{}</title>
+         <meta property=\"og:site_name\" content=\"ADEdge\">
+         <meta property=\"og:title\" content=\"{}\">
+         <meta property=\"og:description\" content=\"uploaded on ADEdge\">
+         <meta property=\"og:url\" content=\"{}\">
+         {}
+         <style>
+           html,body{{height:100%;margin:0}}
+           body{{display:flex;align-items:center;justify-content:center;background:#0f9d58;color:#0a0a0a;font-family:Arial,Helvetica,sans-serif}}
+           .container{{max-width:90%;max-height:90%;display:flex;align-items:center;justify-content:center;flex-direction:column}}
+           .note{{margin-top:12px;color:rgba(255,255,255,0.9);font-size:14px}}
+         </style></head><body>
+         <div class=\"container\">{}<div class=\"note\">This file was uploaded on ADEdge.</div></div>
+         </body></html>",
+        escape_html(&title),
+        escape_html(&title),
         escape_html(&page_url),
-        escape_html(&image_url),
-        escape_html(&image_url)
+        og_block,
+        media_tag
     );
+
     ([
         (header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8")),
         (header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=60")),
     ], Html(html)).into_response()
 }
 
-async fn image_raw(State(state): State<AppState>, Path(filename): Path<String>) -> Response {
+async fn image_raw(
+    State(state): State<AppState>,
+    Path(filename): Path<String>,
+    headers: HeaderMap
+) -> Response {
     let file_path = state.cfg.upload_dir.join(&filename);
     if !file_path.starts_with(&state.cfg.upload_dir) || !file_path.exists() {
         return json_error(StatusCode::NOT_FOUND, "Not found");
     }
 
-    let body = match tfs::read(&file_path).await {
-        Ok(b) => b,
+    let mime = mime_guess::from_path(&file_path).first_or_octet_stream();
+    let mut file = match tfs::File::open(&file_path).await {
+        Ok(f) => f,
         Err(_) => return json_error(StatusCode::NOT_FOUND, "Not found"),
     };
-    let mut resp = Response::new(Body::from(body));
+    let total_len = file.metadata().await.map(|m| m.len()).unwrap_or(0);
+
+    let range_hdr = headers.get(header::RANGE).and_then(|v| v.to_str().ok()).unwrap_or("");
+    if let Some(rest) = range_hdr.strip_prefix("bytes=") {
+        let mut start = 0u64;
+        let mut end   = total_len.saturating_sub(1);
+
+        if let Some((s, e)) = rest.split_once('-') {
+            if !s.is_empty() { if let Ok(v) = s.parse() { start = v; } }
+            if !e.is_empty() { if let Ok(v) = e.parse() { end = v; } }
+            if end >= total_len { end = total_len - 1; }
+            if start > end { return (StatusCode::RANGE_NOT_SATISFIABLE, "").into_response(); }
+        }
+
+        let len = end - start + 1;
+        let _ = file.seek(SeekFrom::Start(start)).await;
+        let reader = file.take(len);
+        let stream = ReaderStream::new(reader);
+
+        let mut resp = Response::new(Body::from_stream(stream));
+        *resp.status_mut() = StatusCode::PARTIAL_CONTENT;
+        resp.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+        );
+        resp.headers_mut().insert(
+            header::CONTENT_RANGE,
+            HeaderValue::from_str(&format!("bytes {}-{}/{}", start, end, total_len)).unwrap(),
+        );
+        resp.headers_mut().insert(
+            header::CONTENT_LENGTH,
+            HeaderValue::from_str(&len.to_string()).unwrap(),
+        );
+        resp.headers_mut().insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        resp.headers_mut().insert(
+            header::CACHE_CONTROL,
+            HeaderValue::from_static("public, max-age=31536000, immutable"),
+        );
+        resp.headers_mut().insert(
+            header::CONTENT_DISPOSITION,
+            HeaderValue::from_static("inline"),
+        );
+        return resp;
+    }
+
+    // fără Range -> full
+    let stream = ReaderStream::new(file);
+    let mut resp = Response::new(Body::from_stream(stream));
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
+    resp.headers_mut().insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
     resp.headers_mut().insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=31536000, immutable"),
+    );
+    resp.headers_mut().insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&total_len.to_string()).unwrap(),
+    );
+    resp.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("inline"),
+    );
+    resp
+}
+
+async fn image_head(
+    State(state): State<AppState>,
+    Path(filename): Path<String>,
+) -> Response {
+    let file_path = state.cfg.upload_dir.join(&filename);
+    if !file_path.starts_with(&state.cfg.upload_dir) || !file_path.exists() {
+        return (StatusCode::NOT_FOUND, "").into_response();
+    }
+    let mime = mime_guess::from_path(&file_path).first_or_octet_stream();
+    let len  = fs::metadata(&file_path).map(|m| m.len()).unwrap_or(0);
+
+    let mut resp = Response::new(Body::empty());
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+    );
+    resp.headers_mut().insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    resp.headers_mut().insert(
+        header::CONTENT_LENGTH,
+        HeaderValue::from_str(&len.to_string()).unwrap(),
+    );
+    resp.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("inline"),
     );
     resp
 }
@@ -1078,11 +1297,7 @@ async fn api_images_delete_by_filename(
     let users_snapshot = {
         let mut users = state.users.lock();
         for u in users.users.iter_mut() {
-            let before = u.images.len();
             u.images.retain(|m| m.filename != safe);
-            if u.username == username && before != u.images.len() {
-                /* changed */
-            }
         }
         users.clone()
     };
@@ -1167,7 +1382,10 @@ async fn api_upload_dashboard(
             }
 
             let host = headers.get(header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("");
-            let origin = get_origin(&headers, "http", host);
+            // alege schema corectă pentru dashboard
+            let have_tls = state.cfg.ssl_key_path.is_some() && state.cfg.ssl_cert_path.is_some();
+            let scheme = if have_tls { "https" } else { "http" };
+            let origin = get_origin(&headers, scheme, host);
             let url = join_url(&origin, &format!("/i/{}", urlencoding::encode(&final_name)));
             let id = Uuid::new_v4().to_string();
             let meta = ImageMeta {
@@ -1457,57 +1675,146 @@ async fn public_register(
 }
 
 // ========================= ShareX .sxcu =========================
-async fn generate_sxcu(State(state): State<AppState>, headers: HeaderMap) -> Response {
+
+fn host_from_url(u: &str) -> Option<String> {
+    let after = u.split("://").nth(1)?;
+    let host = after.split('/').next().unwrap_or("").trim();
+    if host.is_empty() { None } else { Some(host.to_string()) }
+}
+
+fn resolve_public_origin(state: &AppState, headers: &HeaderMap) -> String {
+    if let Ok(env_o) = std::env::var("PUBLIC_ORIGIN") {
+        let env_o = env_o.trim().trim_end_matches('/').to_string();
+        if !env_o.is_empty() {
+            return env_o;
+        }
+    }
+
+    let https_available = state.cfg.ssl_key_path.is_some() && state.cfg.ssl_cert_path.is_some();
+    let scheme = if https_available { "https" } else { "http" };
+
+    let host = headers
+        .get("x-forwarded-host")
+        .or_else(|| headers.get(header::HOST))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()).and_then(host_from_url))
+        .or_else(|| headers.get(header::REFERER).and_then(|v| v.to_str().ok()).and_then(host_from_url))
+        .unwrap_or_else(|| {
+            if https_available {
+                format!("localhost:{}", state.cfg.https_port)
+            } else {
+                format!("localhost:{}", state.cfg.http_port)
+            }
+        });
+
+    format!("{}://{}", scheme, host)
+}
+
+#[axum::debug_handler]
+#[axum::debug_handler]
+async fn generate_sxcu(state: AppState, headers: HeaderMap) -> Response {
+    // 1) auth
     let Some(username) = check_auth(&headers, &state) else {
         return json_error(StatusCode::UNAUTHORIZED, "Unauthorized");
     };
-    let users = state.users.lock();
-    let email = find_user(&users, &username)
-        .map(|u| u.email.clone())
-        .unwrap_or_default();
 
-    // token
-    let token = if let Some(ref plain) = *state.initial_upload_token_plain.lock() {
-        plain.clone()
+    // 2) citește email fără să ții lock la await
+    let email = {
+        let users = state.users.lock();
+        find_user(&users, &username)
+            .map(|u| u.email.clone())
+            .unwrap_or_default()
+    }; // <- lock eliberat aici
+
+    // 3) vezi dacă ai deja un token în memorie (NU ține lock peste await)
+    let maybe_plain: Option<String> = {
+        let g = state.initial_upload_token_plain.lock();
+        g.clone()
+    }; // <- lock eliberat aici
+
+    // 4) fie folosești tokenul existent, fie creezi unul nou (cu hash în thread pool)
+    let token = if let Some(t) = maybe_plain {
+        t
     } else {
         let new_tok = rand_hex(24);
+
+        // calculează hash-ul într-un thread de blocking
+        let new_hash = match tokio::task::spawn_blocking({
+            let t = new_tok.clone();
+            move || bcrypt::hash(t, 10)
+        })
+        .await
+        {
+            Ok(Ok(h)) => h,
+            _ => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Could not hash token"),
+        };
+
+        // scrie hash-ul (scurt lock, fără await)
         {
             let mut h = state.upload_token_hash.lock();
-            *h = bcrypt::hash(&new_tok, 10).unwrap();
+            *h = new_hash;
         }
-        *state.initial_upload_token_plain.lock() = Some(new_tok.clone());
+        {
+            let mut p = state.initial_upload_token_plain.lock();
+            *p = Some(new_tok.clone());
+        }
+
         new_tok
     };
 
-    let host = headers.get(header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("");
-    let origin = get_origin(&headers, "http", host);
+    // 5) origin corect (https dacă ai cheie+cert în .env, altfel http; sau PUBLIC_ORIGIN)
+    let origin = resolve_public_origin(&state, &headers);
+    let base = origin.trim_end_matches('/');
 
+    // 6) payload ShareX
     let sxcu = serde_json::json!({
         "Version": "17.0.0",
-        "Name": format!("ADEdge uploader ({})", origin),
+        "Name": format!("ADEdge uploader ({})", base),
         "DestinationType": "ImageUploader, TextUploader, FileUploader",
         "RequestMethod": "POST",
-        "RequestURL": format!("{}/upload", origin),
-        "Headers": { "Authorization": format!("Bearer {}", token), "X-User-Email": email },
+        "RequestURL": format!("{}/upload", base),
+        "Headers": {
+            "Authorization": format!("Bearer {}", token),
+            "X-User-Email": email,
+            "X-Filename": "{filename}"
+        },
         "Body": "Binary",
         "URL": "{json:url}/view",
         "DeletionURL": "{json:delete_url}"
     });
 
     ([
-        (
-            header::CONTENT_TYPE,
-            HeaderValue::from_static("application/json"),
-        ),
-        (
-            header::CONTENT_DISPOSITION,
-            HeaderValue::from_static("attachment; filename=ADEdge.sxcu"),
-        ),
-    ], Json(sxcu))
-        .into_response()
+        (header::CONTENT_TYPE, HeaderValue::from_static("application/json")),
+        (header::CONTENT_DISPOSITION, HeaderValue::from_static("attachment; filename=ADEdge.sxcu")),
+    ], Json(sxcu)).into_response()
+}
+
+// ========================= JSON helper =========================
+fn json_error(status: StatusCode, msg: &str) -> Response {
+    (status, Json(serde_json::json!({"success": false, "error": msg}))).into_response()
+}
+
+async fn redirect_http(Host(host): Host, OriginalUri(uri): OriginalUri) -> Redirect {
+    Redirect::permanent(&format!("https://{}{}", host, uri))
 }
 
 // ========================= Pagini de bază =========================
+async fn static_file(path: &PathBuf) -> Response {
+    match tfs::read(path).await {
+        Ok(bytes) => {
+            let mut resp = Response::new(Body::from(bytes));
+            resp.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("text/html; charset=utf-8"),
+            );
+            resp
+        }
+        Err(_) => (StatusCode::NOT_FOUND, "").into_response(),
+    }
+}
+
 async fn root(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if check_auth(&headers, &state).is_some() {
         static_file(&state.cfg.public_dir.join("dashboard.html")).await
@@ -1523,12 +1830,10 @@ async fn settings_page(State(state): State<AppState>, headers: HeaderMap) -> Res
     static_file(&state.cfg.public_dir.join("settings.html")).await
 }
 
-async fn dashboard_page(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+async fn dashboard_page(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if check_auth(&headers, &state).is_none() {
-        // dacă nu ești logat, te duce la login
         return static_file(&state.cfg.public_dir.join("login.html")).await;
     }
-    // altfel livrează dashboardul
     static_file(&state.cfg.public_dir.join("dashboard.html")).await
 }
 
@@ -1543,27 +1848,8 @@ async fn register_page(State(state): State<AppState>) -> Response {
     static_file(&state.cfg.public_dir.join("register.html")).await
 }
 
-async fn static_file(path: &PathBuf) -> Response {
-    match tfs::read(path).await {
-        Ok(bytes) => {
-            let mut resp = Response::new(Body::from(bytes));
-            resp.headers_mut().insert(
-                header::CONTENT_TYPE,
-                HeaderValue::from_static("text/html; charset=utf-8"),
-            );
-            resp
-        }
-        Err(_) => (StatusCode::NOT_FOUND, "").into_response(),
-    }
-}
-
 async fn healthz() -> Response {
     Json(serde_json::json!({"ok": true})).into_response()
-}
-
-// ========================= JSON helper =========================
-fn json_error(status: StatusCode, msg: &str) -> Response {
-    (status, Json(serde_json::json!({"success": false, "error": msg}))).into_response()
 }
 
 // ========================= Start server =========================
@@ -1606,7 +1892,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(DEFAULT_RATE_REFILL);
 
-    // (TLS: folosește reverse proxy)
     let ssl_key_path = env_kv
         .get("SSL_KEY_PATH")
         .filter(|s| !s.is_empty())
@@ -1667,7 +1952,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         rate: Arc::new(Mutex::new(HashMap::new())),
     };
 
-    // logging simplu
+    // logging
     println!("Uploads dir: {}", state.cfg.upload_dir.display());
     println!(
         "Registration lock: {}",
@@ -1700,7 +1985,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         // public image endpoints
         .route("/i/:filename/view", get(image_view))
-        .route("/i/:filename", get(image_raw))
+        .route("/i/:filename", get(image_raw).head(image_head))
         // upload (ShareX RAW + dashboard multipart)
         .route("/upload", post(upload_handler))
         // auth
@@ -1726,7 +2011,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/register.html", get(reg_html_404))
         .route("/register", get(register_page).post(public_register))
         // sxcu
-        .route("/api/generate-sxcu", get(generate_sxcu).post(generate_sxcu))
+.route(
+    "/api/generate-sxcu",
+    get(|State(state): State<AppState>, headers: HeaderMap| async move {
+        generate_sxcu(state, headers).await
+    })
+    .post(|State(state): State<AppState>, headers: HeaderMap| async move {
+        generate_sxcu(state, headers).await
+    })
+)
+        .route("/healthz", get(healthz))
         .route(
             "/login",
             get(|State(state): State<AppState>| async move {
@@ -1745,22 +2039,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ))
         .with_state(state.clone());
 
-    let http_listener = tokio::net::TcpListener::bind(("0.0.0.0", state.cfg.http_port)).await?;
-    println!("HTTP server pornit:  http://localhost:{}", state.cfg.http_port);
+    // ===== HTTP și HTTPS =====
+    let http_addr  = SocketAddr::from(([0,0,0,0], state.cfg.http_port));
+    let https_addr = SocketAddr::from(([0,0,0,0], state.cfg.https_port));
 
-    if state.cfg.ssl_key_path.is_some() || state.cfg.ssl_cert_path.is_some() {
-        println!("Info: SSL_*_* configurate în .env, dar TLS e gestionat de reverse proxy (recomandat).");
-        println!("Dacă vrei TLS direct în binar, spune-mi și îți dau varianta cu `axum-server`.");
-    }
+    let have_tls = state.cfg.ssl_key_path.is_some() && state.cfg.ssl_cert_path.is_some();
 
-    let http_server = axum::serve(
-        http_listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    );
+    if have_tls {
+        let cert_path = state.cfg.ssl_cert_path.clone().unwrap();
+        let key_path  = state.cfg.ssl_key_path.clone().unwrap();
 
-    tokio::select! {
-        res = http_server => { if let Err(e) = res { eprintln!("HTTP error: {}", e); } },
-        _ = shutdown_signal() => { println!("Received shutdown, closing..."); }
+        let tls_config = RustlsConfig::from_pem_file(cert_path.clone(), key_path.clone()).await?;
+
+        println!("HTTPS server pornit: https://localhost:{}", state.cfg.https_port);
+
+        // HTTPS serve app-ul tău
+        let https_srv = axum_server::bind_rustls(https_addr, tls_config)
+            .serve(app.clone().into_make_service_with_connect_info::<SocketAddr>());
+
+        // HTTP → redirect către HTTPS
+        let redirect_app = Router::new().fallback(redirect_http);
+        let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
+        println!("HTTP redirect activ:  http://localhost:{} → HTTPS", state.cfg.http_port);
+        let http_srv = axum::serve(
+            http_listener,
+            redirect_app.into_make_service_with_connect_info::<SocketAddr>(),
+        );
+
+        tokio::select! {
+            res = https_srv => { if let Err(e) = res { eprintln!("HTTPS error: {}", e); } },
+            res = http_srv  => { if let Err(e) = res { eprintln!("HTTP redirect error: {}", e); } },
+            _ = shutdown_signal() => { println!("Received shutdown, closing..."); }
+        }
+    } else {
+        // Fără TLS în .env → doar HTTP
+        let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
+        println!("HTTP server pornit:  http://localhost:{}", state.cfg.http_port);
+
+        let http_server = axum::serve(
+            http_listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        );
+
+        tokio::select! {
+            res = http_server => { if let Err(e) = res { eprintln!("HTTP error: {}", e); } },
+            _ = shutdown_signal() => { println!("Received shutdown, closing..."); }
+        }
     }
 
     Ok(())

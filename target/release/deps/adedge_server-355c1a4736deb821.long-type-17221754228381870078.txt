@@ -1,0 +1,2 @@
+fn(axum::extract::State<AppState>, HeaderMap) -> impl std::future::Future<Output = impl IntoResponse> {generate_sxcu_handler}
+fn(axum::extract::State<AppState>, HeaderMap) -> impl std::future::Future<Output = impl IntoResponse> {generate_sxcu_handler}: Handler<_, _>

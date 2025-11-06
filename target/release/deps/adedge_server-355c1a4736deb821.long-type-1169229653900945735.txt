@@ -1,0 +1,2 @@
+fn(axum::extract::State<AppState>, HeaderMap) -> impl std::future::Future<Output = Response<Body>> {generate_sxcu_get}
+fn(axum::extract::State<AppState>, HeaderMap) -> impl std::future::Future<Output = Response<Body>> {generate_sxcu_get}: Handler<_, _>
