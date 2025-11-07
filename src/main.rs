@@ -610,9 +610,20 @@ struct LoginBody {
     password: String,
 }
 
+fn request_is_https(headers: &HeaderMap, state: &AppState) -> bool {
+    let via_proxy_https = headers
+        .get("x-forwarded-proto")
+        .and_then(|v| v.to_str().ok())
+        .map(|p| p.eq_ignore_ascii_case("https"))
+        .unwrap_or(false);
+
+    let have_tls = state.cfg.ssl_key_path.is_some() && state.cfg.ssl_cert_path.is_some();
+    via_proxy_https || have_tls
+}
+
 async fn api_login(
     State(state): State<AppState>,
-    _headers: HeaderMap,
+    headers: HeaderMap,                // <- folosește headers (nu _headers)
     Json(body): Json<LoginBody>,
 ) -> Response {
     if body.username.is_empty() || body.password.is_empty() {
@@ -634,15 +645,27 @@ async fn api_login(
 
     let ts = now_ms();
     let cookie_val = sign_session(state.session_secret.as_str(), &user.username, ts);
-    let secure = std::env::var("NODE_ENV")
-        .ok()
-        .unwrap_or_default()
-        .eq("production");
-    let mut resp =
-        Json(serde_json::json!({"success": true, "username": user.username, "email": user.email}))
-            .into_response();
+
+    // SECURE corect: https “adevărat” (direct sau prin proxy)
+    let secure = request_is_https(&headers, &state);
+
+    let mut resp = Json(serde_json::json!({
+        "success": true,
+        "username": user.username,
+        "email": user.email
+    })).into_response();
+
     resp.headers_mut()
         .append(header::SET_COOKIE, set_cookie("session", &cookie_val, 30, secure));
+
+    // anti-cache pentru răspunsul de login (opțional, dar util)
+    resp.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, max-age=0, must-revalidate, private"),
+    );
+    resp.headers_mut().insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    resp.headers_mut().insert(header::EXPIRES, HeaderValue::from_static("0"));
+
     resp
 }
 
@@ -1012,45 +1035,42 @@ async fn image_view(
     Path(filename): Path<String>,
     headers: HeaderMap,
 ) -> Response {
+    use std::fmt::Write as _;
+
     let file_path = state.cfg.upload_dir.join(&filename);
     if !file_path.starts_with(&state.cfg.upload_dir) || !file_path.exists() {
         return json_error(StatusCode::NOT_FOUND, "Not found");
     }
 
-    let host   = headers.get(header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("");
-    let origin_env_or_hdr = std::env::var("PUBLIC_ORIGIN")
-        .unwrap_or_else(|_| get_origin(&headers, "http", host));
-    let origin_best = prefer_https_origin(&origin_env_or_hdr, &headers, &state);
-
-    let media_url = join_url(&origin_best, &format!("/i/{}", urlencoding::encode(&filename)));
-    let page_url  = join_url(&origin_best, &format!("/i/{}/view", urlencoding::encode(&filename)));
+    // 1) origin forțat din PUBLIC_ORIGIN (altfel derivat), întotdeauna https în OG
+    let mut origin = resolve_public_origin(&state, &headers);
+    if origin.starts_with("http://") {
+        origin = origin.replacen("http://", "https://", 1);
+    }
+    let media_url = join_url(&origin, &format!("/i/{}", urlencoding::encode(&filename)));
+    let page_url  = join_url(&origin, &format!("/i/{}/view", urlencoding::encode(&filename)));
     let title     = filename.clone();
 
+    // 2) tip fișier
     let mime     = mime_guess::from_path(&file_path).first_or_octet_stream();
     let is_video = mime.type_() == mime::VIDEO;
 
-    // normalizăm tipul pt OG (Discord preferă video/mp4)
-    let ext = std::path::Path::new(&filename).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    // 3) tip video OG (Discord iubește mp4/webm)
+    let ext = std::path::Path::new(&filename)
+        .extension().and_then(|e| e.to_str())
+        .unwrap_or("").to_ascii_lowercase();
     let og_video_type = match ext.as_str() {
         "mp4" | "m4v" => "video/mp4",
         "webm"        => "video/webm",
-        // unele .mov vin ca video/quicktime; Discord nu le iubește -> încearcă mp4
         "mov"         => "video/mp4",
-        _             => mime.as_ref(), // fallback la ce a ghicit mime_guess
+        _             => mime.as_ref(),
     };
 
-    // forțăm URL-ul secure dacă pagina e https (Discord preferă secure_url)
-    let media_url_https = if media_url.starts_with("http://") && origin_best.starts_with("https://") {
-        media_url.replacen("http://", "https://", 1)
-    } else {
-        media_url.clone()
-    };
-    let is_https_media = media_url_https.starts_with("https://");
-
+    // 4) media vizibilă în pagină
     let media_tag = if is_video {
         format!(
             "<video src=\"{}\" controls preload=\"metadata\" playsinline style=\"max-width:100%;max-height:80vh;border:6px solid rgba(255,255,255,0.06);box-shadow:0 6px 18px rgba(0,0,0,0.2);border-radius:8px\"></video>",
-            escape_html(&media_url_https)
+            escape_html(&media_url)
         )
     } else {
         format!(
@@ -1059,78 +1079,70 @@ async fn image_view(
         )
     };
 
-    // --- OG pentru Discord: video ---
-    let og_block = if is_video {
-        use std::fmt::Write as _;
-        let mut meta = String::new();
-
-        // Tipul OG de pagină + video URL + tip + dimensiuni
+    // 5) OG pentru Discord (URL-uri absolute, https)
+    let mut og = String::new();
+    if is_video {
         let _ = write!(
-            meta,
-            r#"<meta property="og:type" content="video.other">
-               <meta property="og:video" content="{u}">
-               <meta property="og:video:type" content="{t}">
-               <meta property="og:video:width" content="1280">
-               <meta property="og:video:height" content="720">"#,
-            u = escape_html(&media_url_https),
+            og,
+            r#"
+<meta property="og:type" content="video.other">
+<meta property="og:video" content="{u}">
+<meta property="og:video:url" content="{u}">
+<meta property="og:video:secure_url" content="{u}">
+<meta property="og:video:type" content="{t}">
+<meta property="og:video:width" content="1280">
+<meta property="og:video:height" content="720">
+<!-- poster: Discord preferă să existe și og:image; dacă n-ai thumbnail, lăsăm tot media_url -->
+<meta property="og:image" content="{u}">
+<meta property="og:image:secure_url" content="{u}">
+<meta name="twitter:card" content="player">"#,
+            u = escape_html(&media_url),
             t = escape_html(og_video_type)
         );
-
-        // secure_url dacă avem https
-        if is_https_media {
-            let _ = write!(
-                meta,
-                r#"<meta property="og:video:secure_url" content="{u}">"#,
-                u = escape_html(&media_url_https)
-            );
-        }
-
-        // og:image e recomandat (folosim video ca fallback poster)
-        let _ = write!(
-            meta,
-            r#"<meta property="og:image" content="{img}">
-               <meta name="twitter:card" content="player">"#,
-            img = escape_html(&media_url_https)
-        );
-
-        meta
     } else {
-        // --- OG pentru imagini ---
-        format!(
-            r#"<meta property="og:image" content="{}">
-               <meta property="og:type" content="article">
-               <meta name="twitter:card" content="summary_large_image">"#,
-            escape_html(&media_url)
-        )
-    };
+        let _ = write!(
+            og,
+            r#"
+<meta property="og:type" content="website">
+<meta property="og:image" content="{u}">
+<meta property="og:image:secure_url" content="{u}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">"#,
+            u = escape_html(&media_url)
+        );
+    }
 
     let html = format!(
         "<!doctype html><html lang=\"en\"><head>
-         <meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
-         <title>{}</title>
-         <meta property=\"og:site_name\" content=\"ADEdge\">
-         <meta property=\"og:title\" content=\"{}\">
-         <meta property=\"og:description\" content=\"uploaded on ADEdge\">
-         <meta property=\"og:url\" content=\"{}\">
-         {}
-         <style>
-           html,body{{height:100%;margin:0}}
-           body{{display:flex;align-items:center;justify-content:center;background:#0f9d58;color:#0a0a0a;font-family:Arial,Helvetica,sans-serif}}
-           .container{{max-width:90%;max-height:90%;display:flex;align-items:center;justify-content:center;flex-direction:column}}
-           .note{{margin-top:12px;color:rgba(255,255,255,0.9);font-size:14px}}
-         </style></head><body>
-         <div class=\"container\">{}<div class=\"note\">This file was uploaded on ADEdge.</div></div>
-         </body></html>",
-        escape_html(&title),
+<meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+<title>{}</title>
+<link rel=\"canonical\" href=\"{}\">
+<meta property=\"og:site_name\" content=\"ADEdge\">
+<meta property=\"og:title\" content=\"{}\">
+<meta property=\"og:description\" content=\"uploaded on ADEdge\">
+<meta property=\"og:url\" content=\"{}\">
+{}
+<style>
+  html,body{{height:100%;margin:0}}
+  body{{display:flex;align-items:center;justify-content:center;background:#0b1223;color:#eef3ff;font-family:Arial,Helvetica,sans-serif}}
+  .container{{max-width:90%;max-height:90%;display:flex;align-items:center;justify-content:center;flex-direction:column}}
+  .note{{margin-top:12px;color:rgba(255,255,255,0.85);font-size:14px}}
+</style>
+</head><body>
+<div class=\"container\">{}<div class=\"note\">This file was uploaded on ADEdge.</div></div>
+</body></html>",
         escape_html(&title),
         escape_html(&page_url),
-        og_block,
+        escape_html(&title),
+        escape_html(&page_url),
+        og,
         media_tag
     );
 
     ([
         (header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8")),
-        (header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=60")),
+        (header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=300")),
     ], Html(html)).into_response()
 }
 
@@ -1385,8 +1397,7 @@ async fn api_upload_dashboard(
             // alege schema corectă pentru dashboard
             let have_tls = state.cfg.ssl_key_path.is_some() && state.cfg.ssl_cert_path.is_some();
             let scheme = if have_tls { "https" } else { "http" };
-            let origin = get_origin(&headers, scheme, host);
-            let url = join_url(&origin, &format!("/i/{}", urlencoding::encode(&final_name)));
+            let url = format!("/i/{}", urlencoding::encode(&final_name));
             let id = Uuid::new_v4().to_string();
             let meta = ImageMeta {
                 id: id.clone(),
@@ -1817,35 +1828,57 @@ async fn static_file(path: &PathBuf) -> Response {
 
 async fn root(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if check_auth(&headers, &state).is_some() {
-        static_file(&state.cfg.public_dir.join("dashboard.html")).await
+        Redirect::temporary("/dashboard").into_response()
     } else {
-        static_file(&state.cfg.public_dir.join("login.html")).await
+        Redirect::temporary("/login").into_response()
     }
 }
 
 async fn settings_page(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if check_auth(&headers, &state).is_none() {
-        return static_file(&state.cfg.public_dir.join("login.html")).await;
+        return Redirect::temporary("/login").into_response();
     }
-    static_file(&state.cfg.public_dir.join("settings.html")).await
+    html_page(&state.cfg.public_dir.join("settings.html")).await
 }
 
 async fn dashboard_page(State(state): State<AppState>, headers: HeaderMap) -> Response {
     if check_auth(&headers, &state).is_none() {
-        return static_file(&state.cfg.public_dir.join("login.html")).await;
+        return Redirect::temporary("/login").into_response();
     }
-    static_file(&state.cfg.public_dir.join("dashboard.html")).await
-}
-
-async fn reg_html_404() -> Response {
-    (StatusCode::NOT_FOUND, "").into_response()
+    html_page(&state.cfg.public_dir.join("dashboard.html")).await
 }
 
 async fn register_page(State(state): State<AppState>) -> Response {
     if state.settings.lock().registerBlocked {
         return (StatusCode::FORBIDDEN, "").into_response();
     }
-    static_file(&state.cfg.public_dir.join("register.html")).await
+    html_page(&state.cfg.public_dir.join("register.html")).await
+}
+
+async fn html_page(path: &PathBuf) -> Response {
+    match tfs::read(path).await {
+        Ok(bytes) => {
+            let mut resp = Response::new(Body::from(bytes));
+            resp.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("text/html; charset=utf-8"),
+            );
+            // important: pagini dependente de sesiune NU se cache-uiesc
+            resp.headers_mut().insert(
+                header::CACHE_CONTROL,
+                HeaderValue::from_static("no-store, no-cache, max-age=0, must-revalidate, private"),
+            );
+            resp.headers_mut().insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+            resp.headers_mut().insert(header::EXPIRES, HeaderValue::from_static("0"));
+            resp.headers_mut().insert(header::VARY, HeaderValue::from_static("Cookie"));
+            resp
+        }
+        Err(_) => (StatusCode::NOT_FOUND, "").into_response(),
+    }
+}
+
+async fn reg_html_404() -> Response {
+    (StatusCode::NOT_FOUND, "").into_response()
 }
 
 async fn healthz() -> Response {

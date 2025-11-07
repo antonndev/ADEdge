@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link id="favicon" rel="icon" type="image/png" href="/public/resources/adsetups-dark.png" sizes="14x14" />
   <title>Create account – ADEdge</title>
+
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
   <style>
     :root {
       --bg: radial-gradient(circle at top, #0f172a 0%, #020617 40%, #020617 100%);
@@ -354,7 +358,7 @@
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
       try {
-        const res = await fetch('/registeryouraccount/register', {
+        const res = await fetch('/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',

@@ -1,0 +1,73 @@
+warning: unused variable: `username`
+    --> src/main.rs:1270:14
+     |
+1270 |     let Some(username) = check_auth(&heade...
+     |              ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_username`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `dashboard_html` is never read
+   --> src/main.rs:176:5
+    |
+170 | struct Config {
+    |        ------ field in this struct
+...
+176 |     dashboard_html: PathBuf,
+    |     ^^^^^^^^^^^^^^
+    |
+    = note: `Config` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `is_image_mime` is never used
+   --> src/main.rs:254:4
+    |
+254 | fn is_image_mime(filename: &str) -> bool {
+    |    ^^^^^^^^^^^^^
+
+warning: function `ip_string` is never used
+   --> src/main.rs:849:4
+    |
+849 | fn ip_string(addr: Option<SocketAddr>) -> S...
+    |    ^^^^^^^^^
+
+warning: structure field `registerBlocked` should have a snake case name
+   --> src/main.rs:158:5
+    |
+158 |     registerBlocked: bool,
+    |     ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `register_blocked`
+    |
+    = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: structure field `currentPassword` should have a snake case name
+   --> src/main.rs:669:5
+    |
+669 |     currentPassword: Option<String>,
+    |     ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `current_password`
+
+warning: structure field `newPassword` should have a snake case name
+   --> src/main.rs:670:5
+    |
+670 |     newPassword: Option<String>,
+    |     ^^^^^^^^^^^ help: convert the identifier to snake case: `new_password`
+
+warning: structure field `newUploadToken` should have a snake case name
+   --> src/main.rs:671:5
+    |
+671 |     newUploadToken: Option<String>,
+    |     ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `new_upload_token`
+
+warning: structure field `newUsername` should have a snake case name
+    --> src/main.rs:1440:5
+     |
+1440 |     newUsername: String,
+     |     ^^^^^^^^^^^ help: convert the identifier to snake case: `new_username`
+
+warning: `adedge-server` (bin "adedge-server") generated 9 warnings
+    Finished `release` profile [optimized] target(s) in 0.06s
+     Running `target/release/adedge-server`
+Uploads dir: uploads
+Registration lock: BLOCKED
+If you need an upload token, set it via Settings -> Set new Upload Token.
+Admin user exists (or was created earlier).
+HTTPS server pornit: https://localhost:443
+HTTP redirect activ:  http://localhost:80 → HTTPS
