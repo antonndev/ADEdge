@@ -58,9 +58,12 @@ use parking_lot::Mutex;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use image::GenericImageView;
+use rand::{distributions::Alphanumeric, Rng};
 
 use axum_server::tls_rustls::RustlsConfig;
 use axum::{response::Redirect, extract::{Host, OriginalUri}};
+use image::imageops::FilterType;
 
 use std::{
     collections::HashMap,
@@ -73,6 +76,9 @@ use std::{
 };
 use tokio::{fs as tfs, io::AsyncWriteExt, signal};
 use tokio_util::io::ReaderStream;
+
+use std::ffi::OsStr;
+
 use tokio_stream::StreamExt; // pentru .next() pe BodyDataStream
 use tower_http::services::ServeDir;
 use tokio::io::{AsyncReadExt, AsyncSeekExt}; // pentru .take() și .seek()
@@ -207,6 +213,39 @@ struct AppState {
 }
 
 // ========================= Utilitare =========================
+
+#[inline]
+fn random_slug(len: usize) -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(len)
+        .map(char::from)
+        .collect::<String>()
+        .to_lowercase()
+}
+
+/// Încearcă să deschidă `tmp_path` ca imagine.
+/// Dacă reușește -> aplică mici îmbunătățiri (upscale dacă e mică + unsharp) și encodează WebP (q~86),
+///         scrie în uploads/<slug>.webp și șterge fișierul temporar.
+/// Dacă NU e imagine -> redenumește fișierul temporar în uploads/<slug>.<ext_original>.
+/// Returnează (final_filename, final_size_bytes).
+
+/// Dacă `tmp_path` este imagine:
+///   - upscale ușor (dacă e mică) + unsharp
+///   - encodează WebP (q ~ 86)
+///   - salvează în uploads/<slug>.webp
+///   - șterge fișierul temporar
+/// Altfel (non-imagine):
+///   - redenumește temporarul în uploads/<slug>.<ext_original>
+
+/// Dacă `tmp_path` este imagine:
+///   - upscale ușor (dacă e mică) + unsharp
+///   - encodează WebP (q ~ 86)
+///   - salvează în uploads/<slug>.webp
+///   - șterge fișierul temporar
+/// Altfel (non-imagine):
+///   - redenumește temporarul în uploads/<slug>.<ext_original>
+
 fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -934,6 +973,72 @@ async fn finalize_upload(
         .into_response()
 }
 
+async fn finalize_with_webp_if_image(
+    upload_dir: std::path::PathBuf,
+    tmp_path: std::path::PathBuf,
+    original_name: String,
+) -> std::io::Result<(String, u64)> {
+    tokio::task::spawn_blocking(move || -> std::io::Result<(String, u64)> {
+        // citim tot în memorie ca să nu depindem de magic-uri pe sistemul de fișiere
+        let bytes = std::fs::read(&tmp_path)?;
+
+        // încearcă decodare generică
+        let decoded = image::load_from_memory(&bytes);
+        if let Ok(mut img) = decoded {
+            // 1) upscale dacă e mică (min 1080 pe latura scurtă, dar nu mai mult de 2x)
+            let (w, h) = img.dimensions();
+            let short = w.min(h);
+            if short < 1080 {
+                let scale = (1080.0_f32 / short as f32).min(2.0_f32);
+                let new_w = (w as f32 * scale).round() as u32;
+                let new_h = (h as f32 * scale).round() as u32;
+                img = img.resize(new_w, new_h, FilterType::Lanczos3);
+            }
+
+            // 2) claritate ușoară (unsharp)
+            let rgba = img.to_rgba8();
+            let sharpened = image::imageops::unsharpen(&rgba, 1.0_f32, 8);
+            let img = image::DynamicImage::ImageRgba8(sharpened);
+
+            // 3) encode WebP (q=90) — FORȚAT .webp
+            let final_name = format!("{}.webp", random_slug(13));
+            let out_path = upload_dir.join(&final_name);
+
+            let encoder = webp::Encoder::from_image(&img)
+                .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "webp encode init failed"))?;
+            let webp_data = encoder.encode(90.0_f32);
+
+            std::fs::write(&out_path, &*webp_data)?;
+            let sz = std::fs::metadata(&out_path)?.len();
+
+            // curățenie
+            let _ = std::fs::remove_file(&tmp_path);
+
+            eprintln!("[upload] converted to webp -> {}", final_name);
+            Ok((final_name, sz))
+        } else {
+            // non-imagine: păstrează ext originală
+            let ext = std::path::Path::new(&original_name)
+                .extension()
+                .and_then(OsStr::to_str)
+                .map(|s| s.to_ascii_lowercase())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "bin".to_string());
+
+            let final_name = format!("{}.{}", random_slug(13), ext);
+            let out_path = upload_dir.join(&final_name);
+
+            std::fs::rename(&tmp_path, &out_path)?;
+            let sz = std::fs::metadata(&out_path)?.len();
+
+            eprintln!("[upload] non-image -> keep ext: {}", final_name);
+            Ok((final_name, sz))
+        }
+    })
+    .await
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("join error: {e}")))?
+}
+
 // ---------- Upload RAW (ShareX) ----------
 async fn upload_handler(
     State(state): State<AppState>,
@@ -964,21 +1069,21 @@ async fn upload_handler(
         return json_error(StatusCode::UNAUTHORIZED, "Invalid upload token");
     }
 
-    // nume fișier
+    // nume original doar pentru fallback ext
     let filename_header = headers
         .get("x-filename")
         .and_then(|v| v.to_str().ok())
         .unwrap_or(&format!("{}.png", now_ms()))
         .to_string();
-    let safe = sanitize_filename(&filename_header);
-    let final_name = format!("{}-{}-{}", now_ms(), Uuid::new_v4(), safe);
-    let filepath = state.cfg.upload_dir.join(&final_name);
 
-    // deschide fișierul și scrie stream-ul pe disc
+    // scriem în TEMP
+    let tmp_name = format!("tmp-{}-{}", now_ms(), Uuid::new_v4());
+    let tmp_path = state.cfg.upload_dir.join(&tmp_name);
+
     let mut file = match tfs::OpenOptions::new()
         .create_new(true)
         .write(true)
-        .open(&filepath)
+        .open(&tmp_path)
         .await
     {
         Ok(f) => f,
@@ -993,17 +1098,17 @@ async fn upload_handler(
         let chunk = match chunk_res {
             Ok(c) => c,
             Err(_) => {
-                let _ = tfs::remove_file(&filepath).await;
+                let _ = tfs::remove_file(&tmp_path).await;
                 return json_error(StatusCode::BAD_REQUEST, "Upload error");
             }
         };
         size += chunk.len() as u64;
         if size > state.cfg.max_upload_bytes {
-            let _ = tfs::remove_file(&filepath).await;
+            let _ = tfs::remove_file(&tmp_path).await;
             return json_error(StatusCode::PAYLOAD_TOO_LARGE, "File too large");
         }
         if let Err(_) = file.write_all(&chunk).await {
-            let _ = tfs::remove_file(&filepath).await;
+            let _ = tfs::remove_file(&tmp_path).await;
             return json_error(StatusCode::BAD_REQUEST, "Upload error");
         }
     }
@@ -1013,16 +1118,39 @@ async fn upload_handler(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    // alege schema corectă (https dacă serverul are TLS configurat, altfel http)
     let have_tls = state.cfg.ssl_key_path.is_some() && state.cfg.ssl_cert_path.is_some();
     let scheme = if have_tls { "https" } else { "http" };
+
+    // finalize: imagine -> webp
+    let (final_name, final_size) = match finalize_with_webp_if_image(
+        state.cfg.upload_dir.clone(),
+        tmp_path.clone(),
+        filename_header.clone(),
+    )
+    .await
+    {
+        Ok((name, sz)) => (name, sz),
+        Err(e) => {
+            eprintln!("[upload] finalize_with_webp_if_image error: {e}");
+            // fallback: redenumește temporarul cu ext originală
+            let ext = std::path::Path::new(&filename_header)
+                .extension()
+                .and_then(std::ffi::OsStr::to_str)
+                .unwrap_or("bin");
+            let fallback_name = format!("{}.{}", random_slug(13), ext);
+            let fallback_path = state.cfg.upload_dir.join(&fallback_name);
+            let _ = tfs::rename(&tmp_path, &fallback_path).await;
+            let sz = tfs::metadata(&fallback_path).await.map(|m| m.len()).unwrap_or(0);
+            (fallback_name, sz)
+        }
+    };
 
     finalize_upload(
         &state,
         &headers,
         final_name,
         filename_header,
-        size,
+        final_size,
         scheme,
         host,
     )
@@ -1037,28 +1165,39 @@ async fn image_view(
 ) -> Response {
     use std::fmt::Write as _;
 
-    let file_path = state.cfg.upload_dir.join(&filename);
+    // 0) canonical: dacă vine cu slash la final -> redirect 301 fără slash
+    if filename.ends_with('/') {
+        let fname = filename.trim_end_matches('/');
+        return Redirect::permanent(&format!("/i/{}/view", urlencoding::encode(fname))).into_response();
+    }
+    let fname = filename; // deja fără trailing
+
+    // 1) verifică fișierul pe disc (în uploads)
+    let file_path = state.cfg.upload_dir.join(&fname);
     if !file_path.starts_with(&state.cfg.upload_dir) || !file_path.exists() {
         return json_error(StatusCode::NOT_FOUND, "Not found");
     }
 
-    // 1) origin forțat din PUBLIC_ORIGIN (altfel derivat), întotdeauna https în OG
-    let mut origin = resolve_public_origin(&state, &headers);
-    if origin.starts_with("http://") {
-        origin = origin.replacen("http://", "https://", 1);
-    }
-    let media_url = join_url(&origin, &format!("/i/{}", urlencoding::encode(&filename)));
-    let page_url  = join_url(&origin, &format!("/i/{}/view", urlencoding::encode(&filename)));
-    let title     = filename.clone();
+    // 2) URL-uri:
+    //   - RELATIVE pentru HTML (evităm cert mismatch în browser)
+    //   - ABSOLUTE pentru OG (Discord/Twitter)
+    let rel_media  = format!("/uploads/{}", urlencoding::encode(&fname));
+    let rel_page   = format!("/i/{}/view", urlencoding::encode(&fname));
 
-    // 2) tip fișier
+    let abs_origin = resolve_public_origin(&state, &headers); // setează PUBLIC_ORIGIN=https://cdn.antonn.ro ca să fie beton
+    let abs_media  = join_url(&abs_origin, &rel_media);
+    let abs_page   = join_url(&abs_origin, &rel_page);
+
+    let title = fname.clone();
+
+    // 3) mime & video?
     let mime     = mime_guess::from_path(&file_path).first_or_octet_stream();
     let is_video = mime.type_() == mime::VIDEO;
 
-    // 3) tip video OG (Discord iubește mp4/webm)
-    let ext = std::path::Path::new(&filename)
+    let ext = std::path::Path::new(&title)
         .extension().and_then(|e| e.to_str())
         .unwrap_or("").to_ascii_lowercase();
+
     let og_video_type = match ext.as_str() {
         "mp4" | "m4v" => "video/mp4",
         "webm"        => "video/webm",
@@ -1066,20 +1205,37 @@ async fn image_view(
         _             => mime.as_ref(),
     };
 
-    // 4) media vizibilă în pagină
+    // 4) poster (poți pune un thumbnail la /public/og-video.png)
+    let poster_abs = if is_video {
+        join_url(&abs_origin, "/public/og-video.png")
+    } else {
+        abs_media.clone()
+    };
+
+    // 5) media în pagină — RELATIV (fără host)
     let media_tag = if is_video {
         format!(
-            "<video src=\"{}\" controls preload=\"metadata\" playsinline style=\"max-width:100%;max-height:80vh;border:6px solid rgba(255,255,255,0.06);box-shadow:0 6px 18px rgba(0,0,0,0.2);border-radius:8px\"></video>",
-            escape_html(&media_url)
+            "<video controls preload=\"metadata\" playsinline \
+             style=\"max-width:100%;max-height:80vh;border:6px solid rgba(255,255,255,0.06);\
+                    box-shadow:0 6px 18px rgba(0,0,0,0.2);border-radius:8px\" \
+             poster=\"{poster}\">
+                <source src=\"{src}\" type=\"{typ}\">
+                Your browser does not support the video tag.
+             </video>",
+            poster = escape_html(&poster_abs),   // absolut (același host corect)
+            src    = escape_html(&rel_media),    // RELATIV → nu mai apare CN invalid
+            typ    = escape_html(og_video_type),
         )
     } else {
         format!(
-            "<img src=\"{}\" alt=\"Shared file\" style=\"max-width:100%;max-height:80vh;border:6px solid rgba(255,255,255,0.06);box-shadow:0 6px 18px rgba(0,0,0,0.2);border-radius:8px\"/>",
-            escape_html(&media_url)
+            "<img src=\"{}\" alt=\"Shared file\" \
+                   style=\"max-width:100%;max-height:80vh;border:6px solid rgba(255,255,255,0.06);\
+                          box-shadow:0 6px 18px rgba(0,0,0,0.2);border-radius:8px\"/>",
+            escape_html(&rel_media) // RELATIV
         )
     };
 
-    // 5) OG pentru Discord (URL-uri absolute, https)
+    // 6) Open Graph / Twitter — ABSOLUT (necesar pt. embed)
     let mut og = String::new();
     if is_video {
         let _ = write!(
@@ -1092,12 +1248,15 @@ async fn image_view(
 <meta property="og:video:type" content="{t}">
 <meta property="og:video:width" content="1280">
 <meta property="og:video:height" content="720">
-<!-- poster: Discord preferă să existe și og:image; dacă n-ai thumbnail, lăsăm tot media_url -->
-<meta property="og:image" content="{u}">
-<meta property="og:image:secure_url" content="{u}">
-<meta name="twitter:card" content="player">"#,
-            u = escape_html(&media_url),
-            t = escape_html(og_video_type)
+<meta property="og:image" content="{p}">
+<meta name="twitter:card" content="player">
+<meta name="twitter:player" content="{page}">
+<meta name="twitter:player:width" content="1280">
+<meta name="twitter:player:height" content="720">"#,
+            u = escape_html(&abs_media),
+            t = escape_html(og_video_type),
+            p = escape_html(&poster_abs),
+            page = escape_html(&abs_page),
         );
     } else {
         let _ = write!(
@@ -1109,10 +1268,11 @@ async fn image_view(
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">"#,
-            u = escape_html(&media_url)
+            u = escape_html(&abs_media)
         );
     }
 
+    // 7) HTML final (canonical absolut, media relativ)
     let html = format!(
         "<!doctype html><html lang=\"en\"><head>
 <meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
@@ -1122,6 +1282,7 @@ async fn image_view(
 <meta property=\"og:title\" content=\"{}\">
 <meta property=\"og:description\" content=\"uploaded on ADEdge\">
 <meta property=\"og:url\" content=\"{}\">
+<meta name=\"theme-color\" content=\"#0b1223\">
 {}
 <style>
   html,body{{height:100%;margin:0}}
@@ -1133,17 +1294,19 @@ async fn image_view(
 <div class=\"container\">{}<div class=\"note\">This file was uploaded on ADEdge.</div></div>
 </body></html>",
         escape_html(&title),
-        escape_html(&page_url),
+        escape_html(&abs_page), // canonical ABSOLUT
         escape_html(&title),
-        escape_html(&page_url),
+        escape_html(&abs_page), // og:url ABSOLUT
         og,
         media_tag
     );
 
-    ([
-        (header::CONTENT_TYPE, HeaderValue::from_static("text/html; charset=utf-8")),
-        (header::CACHE_CONTROL, HeaderValue::from_static("public, max-age=300")),
-    ], Html(html)).into_response()
+    let mut resp = Html(html).into_response();
+    resp.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=300"),
+    );
+    resp
 }
 
 async fn image_raw(
@@ -1156,7 +1319,24 @@ async fn image_raw(
         return json_error(StatusCode::NOT_FOUND, "Not found");
     }
 
+    // mapare explicită pentru tipuri comune (inclusiv webp) + fallback la mime_guess
+    let ext_lc = std::path::Path::new(&filename)
+        .extension().and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase());
+    let ct_static = match ext_lc.as_deref() {
+        Some("webp") => Some(HeaderValue::from_static("image/webp")),
+        Some("png")  => Some(HeaderValue::from_static("image/png")),
+        Some("jpg") | Some("jpeg") => Some(HeaderValue::from_static("image/jpeg")),
+        Some("gif")  => Some(HeaderValue::from_static("image/gif")),
+        Some("svg")  => Some(HeaderValue::from_static("image/svg+xml")),
+        Some("mp4") | Some("m4v")  => Some(HeaderValue::from_static("video/mp4")),
+        Some("webm") => Some(HeaderValue::from_static("video/webm")),
+        Some("mov")  => Some(HeaderValue::from_static("video/quicktime")),
+        _ => None,
+    };
+
     let mime = mime_guess::from_path(&file_path).first_or_octet_stream();
+
     let mut file = match tfs::File::open(&file_path).await {
         Ok(f) => f,
         Err(_) => return json_error(StatusCode::NOT_FOUND, "Not found"),
@@ -1182,10 +1362,16 @@ async fn image_raw(
 
         let mut resp = Response::new(Body::from_stream(stream));
         *resp.status_mut() = StatusCode::PARTIAL_CONTENT;
-        resp.headers_mut().insert(
-            header::CONTENT_TYPE,
-            HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
-        );
+
+        if let Some(ct) = ct_static {
+            resp.headers_mut().insert(header::CONTENT_TYPE, ct);
+        } else {
+            resp.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+            );
+        }
+
         resp.headers_mut().insert(
             header::CONTENT_RANGE,
             HeaderValue::from_str(&format!("bytes {}-{}/{}", start, end, total_len)).unwrap(),
@@ -1209,10 +1395,16 @@ async fn image_raw(
     // fără Range -> full
     let stream = ReaderStream::new(file);
     let mut resp = Response::new(Body::from_stream(stream));
-    resp.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
-    );
+
+    if let Some(ct) = ct_static {
+        resp.headers_mut().insert(header::CONTENT_TYPE, ct);
+    } else {
+        resp.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+        );
+    }
+
     resp.headers_mut().insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
     resp.headers_mut().insert(
         header::CACHE_CONTROL,
@@ -1237,14 +1429,37 @@ async fn image_head(
     if !file_path.starts_with(&state.cfg.upload_dir) || !file_path.exists() {
         return (StatusCode::NOT_FOUND, "").into_response();
     }
+
+    let ext_lc = std::path::Path::new(&filename)
+        .extension().and_then(|e| e.to_str())
+        .map(|s| s.to_ascii_lowercase());
+
+    let ct_static = match ext_lc.as_deref() {
+        Some("webp") => Some(HeaderValue::from_static("image/webp")),
+        Some("png")  => Some(HeaderValue::from_static("image/png")),
+        Some("jpg") | Some("jpeg") => Some(HeaderValue::from_static("image/jpeg")),
+        Some("gif")  => Some(HeaderValue::from_static("image/gif")),
+        Some("svg")  => Some(HeaderValue::from_static("image/svg+xml")),
+        Some("mp4") | Some("m4v")  => Some(HeaderValue::from_static("video/mp4")),
+        Some("webm") => Some(HeaderValue::from_static("video/webm")),
+        Some("mov")  => Some(HeaderValue::from_static("video/quicktime")),
+        _ => None,
+    };
+
     let mime = mime_guess::from_path(&file_path).first_or_octet_stream();
     let len  = fs::metadata(&file_path).map(|m| m.len()).unwrap_or(0);
 
     let mut resp = Response::new(Body::empty());
-    resp.headers_mut().insert(
-        header::CONTENT_TYPE,
-        HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
-    );
+
+    if let Some(ct) = ct_static {
+        resp.headers_mut().insert(header::CONTENT_TYPE, ct);
+    } else {
+        resp.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
+        );
+    }
+
     resp.headers_mut().insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
     resp.headers_mut().insert(
         header::CONTENT_LENGTH,
@@ -1368,42 +1583,63 @@ async fn api_upload_dashboard(
     let Some(username) = check_auth(&headers, &state) else {
         return json_error(StatusCode::UNAUTHORIZED, "Unauthorized");
     };
+
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         if field.name().unwrap_or("") == "file" {
-            // IMPORTANT: copiem numele într-un String înainte să "mutăm" field
             let filename_raw = field.file_name().unwrap_or("file").to_string();
-            let safe = sanitize_filename(&filename_raw);
-            let final_name = format!("{}-{}-{}", now_ms(), Uuid::new_v4(), safe);
-            let filepath = state.cfg.upload_dir.join(&final_name);
-            let mut file = match tfs::File::create(&filepath).await {
+
+            // TEMP
+            let tmp_name = format!("tmp-{}-{}", now_ms(), Uuid::new_v4());
+            let tmp_path = state.cfg.upload_dir.join(&tmp_name);
+            let mut file = match tfs::File::create(&tmp_path).await {
                 Ok(f) => f,
                 Err(_) => return json_error(StatusCode::BAD_REQUEST, "Upload error"),
             };
+
             let mut size: u64 = 0;
             let mut stream = field;
             while let Some(chunk) = stream.chunk().await.unwrap() {
                 size += chunk.len() as u64;
                 if size > state.cfg.max_upload_bytes {
-                    let _ = tfs::remove_file(&filepath).await;
+                    let _ = tfs::remove_file(&tmp_path).await;
                     return json_error(StatusCode::PAYLOAD_TOO_LARGE, "File too large");
                 }
                 if let Err(_) = file.write_all(&chunk).await {
-                    let _ = tfs::remove_file(&filepath).await;
+                    let _ = tfs::remove_file(&tmp_path).await;
                     return json_error(StatusCode::BAD_REQUEST, "Upload error");
                 }
             }
 
-            let host = headers.get(header::HOST).and_then(|v| v.to_str().ok()).unwrap_or("");
-            // alege schema corectă pentru dashboard
-            let have_tls = state.cfg.ssl_key_path.is_some() && state.cfg.ssl_cert_path.is_some();
-            let scheme = if have_tls { "https" } else { "http" };
+            let (final_name, final_size) = match finalize_with_webp_if_image(
+                state.cfg.upload_dir.clone(),
+                tmp_path.clone(),
+                filename_raw.clone(),
+            )
+            .await
+            {
+                Ok((name, sz)) => (name, sz),
+                Err(e) => {
+                    eprintln!("[dashboard] finalize_with_webp_if_image error: {e}");
+                    let ext = std::path::Path::new(&filename_raw)
+                        .extension()
+                        .and_then(std::ffi::OsStr::to_str)
+                        .unwrap_or("bin");
+                    let fallback_name = format!("{}.{}", random_slug(13), ext);
+                    let fallback_path = state.cfg.upload_dir.join(&fallback_name);
+                    let _ = tfs::rename(&tmp_path, &fallback_path).await;
+                    let sz = tfs::metadata(&fallback_path).await.map(|m| m.len()).unwrap_or(0);
+                    (fallback_name, sz)
+                }
+            };
+
             let url = format!("/i/{}", urlencoding::encode(&final_name));
             let id = Uuid::new_v4().to_string();
+
             let meta = ImageMeta {
                 id: id.clone(),
                 filename: final_name.clone(),
                 originalname: filename_raw,
-                size,
+                size: final_size,
                 url: url.clone(),
                 uploaded_at: now_ms(),
                 owner: Some(username.clone()),
@@ -1430,6 +1666,7 @@ async fn api_upload_dashboard(
             return Json(serde_json::json!({"success": true, "url": url})).into_response();
         }
     }
+
     json_error(StatusCode::BAD_REQUEST, "No file")
 }
 
@@ -1745,7 +1982,7 @@ async fn generate_sxcu(state: AppState, headers: HeaderMap) -> Response {
         g.clone()
     }; // <- lock eliberat aici
 
-    // 4) fie folosești tokenul existent, fie creezi unul nou (cu hash în thread pool)
+    // 4) folosești tokenul existent sau creezi + PERSISTI unul nou
     let token = if let Some(t) = maybe_plain {
         t
     } else {
@@ -1762,7 +1999,7 @@ async fn generate_sxcu(state: AppState, headers: HeaderMap) -> Response {
             _ => return json_error(StatusCode::INTERNAL_SERVER_ERROR, "Could not hash token"),
         };
 
-        // scrie hash-ul (scurt lock, fără await)
+        // scrie hash-ul în memorie
         {
             let mut h = state.upload_token_hash.lock();
             *h = new_hash;
@@ -1770,6 +2007,11 @@ async fn generate_sxcu(state: AppState, headers: HeaderMap) -> Response {
         {
             let mut p = state.initial_upload_token_plain.lock();
             *p = Some(new_tok.clone());
+        }
+
+        // *** IMPORTANT: persistă în .env ca să supraviețuiască restart-urilor ***
+        if let Err(e) = persist_upload_token_in_env(&new_tok) {
+            eprintln!("WARN: could not persist upload token to .env: {}", e);
         }
 
         new_tok
@@ -2018,7 +2260,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         // public image endpoints
         .route("/i/:filename/view", get(image_view))
-        .route("/i/:filename", get(image_raw).head(image_head))
+.route("/i/:filename/", get(|Path(filename): Path<String>| async move {
+    Redirect::permanent(&format!("/i/{}", filename.trim_end_matches('/'))).into_response()
+}))
         // upload (ShareX RAW + dashboard multipart)
         .route("/upload", post(upload_handler))
         // auth
@@ -2065,7 +2309,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/settings", get(settings_page))
         // static public + backgrounds dir
         .nest_service("/public", ServeDir::new(state.cfg.public_dir.clone()))
-        .nest_service("/backgrounds", ServeDir::new(state.cfg.background_dir.clone()))
+.nest_service("/backgrounds", ServeDir::new(state.cfg.background_dir.clone()))
+.nest_service("/uploads", ServeDir::new(state.cfg.upload_dir.clone()))
         // setează limita de body (pentru stream upload RAW)
         .layer(axum::extract::DefaultBodyLimit::max(
             state.cfg.max_upload_bytes as usize,
