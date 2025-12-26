@@ -1246,7 +1246,6 @@
             img.src = url;
             img.alt = name;
             img.loading = 'lazy';
-            img.onerror = function(){ this.src = '/public/image-fallback.png'; };
 
             const meta = document.createElement('div');
             meta.className = 'img-meta';
@@ -1470,4 +1469,5 @@
   })();
   </script>
 </body>
+
 </html>
