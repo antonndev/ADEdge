@@ -2131,8 +2131,48 @@ async fn healthz() -> Response {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // .env bootstrap
-    let env_path = FsPath::new(".env");
-    let (initial_upload_token_plain, env_kv) = ensure_env(env_path);
+use std::path::PathBuf;
+
+fn find_base_dir() -> PathBuf {
+    let mut candidates: Vec<PathBuf> = vec![];
+
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd);
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.to_path_buf());
+            candidates.push(dir.join(".."));
+            candidates.push(dir.join("../.."));
+            candidates.push(dir.join("../../.."));
+        }
+    }
+
+    for c in candidates {
+        let c = c.canonicalize().unwrap_or(c);
+        if c.join("public/login.html").exists() {
+            return c;
+        }
+    }
+
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+    let base_dir = find_base_dir();
+
+let env_path_buf = base_dir.join(".env");
+let (initial_upload_token_plain, env_kv) = ensure_env(env_path_buf.as_path());
+
+let public_dir = base_dir.join("public");
+let data_dir   = base_dir.join("data");
+
+let upload_dir_raw =
+    PathBuf::from(env_kv.get("UPLOAD_DIR").cloned().unwrap_or_else(|| DEFAULT_UPLOAD_DIR.into()));
+let upload_dir = if upload_dir_raw.is_absolute() {
+    upload_dir_raw
+} else {
+    base_dir.join(upload_dir_raw)
+};
 
     // config
     let http_port = env_kv
@@ -2143,13 +2183,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get("PORT_HTTPS")
         .and_then(|v| v.parse().ok())
         .unwrap_or(DEFAULT_PORT_HTTPS);
-    let upload_dir =
-        PathBuf::from(env_kv.get("UPLOAD_DIR").cloned().unwrap_or_else(|| DEFAULT_UPLOAD_DIR.into()));
     let background_dir = upload_dir.join("backgrounds");
-    let public_dir = PathBuf::from("public");
     let dashboard_html = public_dir.join("dashboard.html");
 
-    let data_dir = PathBuf::from("data");
     let users_file = data_dir.join("users.json");
     let images_file = data_dir.join("images.json");
     let settings_file = data_dir.join("settings.json");
